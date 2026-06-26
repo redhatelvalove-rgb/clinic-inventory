@@ -1,0 +1,11 @@
+node_modules/
+dist/
+data.db
+data.db-shm
+data.db-wal
+.env
+.env.local
+*.local
+
+# 個資：護理人員真實姓名（本機專用，不得提交）
+client/src/lib/staff.local.ts
