@@ -5,8 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, PlusCircle, Clock } from "lucide-react";
+import { Loader2, PlusCircle, Clock, Camera } from "lucide-react";
 import { NURSING_STAFF } from "@/lib/staff";
+import BarcodeScanner from "@/components/BarcodeScanner";
 import type { Vendor } from "@shared/schema";
 
 const CATEGORIES = ["關節注射", "骨質疏鬆", "骨質疏鬆針劑", "神經阻斷劑", "耗材", "其他"];
@@ -17,6 +18,7 @@ export default function AddMedication() {
   const { toast } = useToast();
   const [done, setDone] = useState(false);
   const [submittedName, setSubmittedName] = useState("");
+  const [showScanner, setShowScanner] = useState(false);
 
   const [form, setForm] = useState({
     name: "", genericName: "", category: "", unit: "",
@@ -78,6 +80,12 @@ export default function AddMedication() {
   // ── 表單 ─────────────────────────────────────────────────────────────────────
   return (
     <div className="max-w-lg mx-auto">
+      {showScanner && (
+        <BarcodeScanner
+          onScan={(code) => setForm(f => ({ ...f, barcode: code }))}
+          onClose={() => setShowScanner(false)}
+        />
+      )}
       <div className="mb-5">
         <h1 className="text-lg font-bold text-foreground flex items-center gap-2">
           <PlusCircle size={20} className="text-primary" />
@@ -160,7 +168,14 @@ export default function AddMedication() {
         {/* 條碼 */}
         <div className="space-y-1.5">
           <Label className="text-sm font-medium">條碼（選填）</Label>
-          <Input placeholder="掃描或手動輸入" value={form.barcode} onChange={set("barcode")} data-testid="input-barcode" />
+          <div className="flex gap-2">
+            <Input className="flex-1" placeholder="掃描或手動輸入" value={form.barcode} onChange={set("barcode")} data-testid="input-barcode" />
+            <Button type="button" variant="outline" className="h-10 px-3 shrink-0"
+              onClick={() => setShowScanner(true)} data-testid="button-scan-barcode">
+              <Camera size={16} className="mr-1.5" />掃描
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">直接掃描藥盒上的原廠條碼即可填入</p>
         </div>
 
         {/* 備註 */}
