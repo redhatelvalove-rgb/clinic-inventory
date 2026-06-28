@@ -1,11 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { Search, Filter, Pill, Thermometer, AlertTriangle } from "lucide-react";
+import { Search, Filter, Pill, Thermometer, AlertTriangle, Pencil } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import EditMedicationModal from "@/components/EditMedicationModal";
 
 const CATEGORY_COLORS: Record<string, string> = {
   "關節注射": "badge-info",
@@ -49,6 +50,7 @@ function StockStatus({ current, safety, reorder }: { current: number; safety: nu
 export default function Medications() {
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("all");
+  const [editing, setEditing] = useState<any | null>(null);
   const { data: meds = [], isLoading } = useQuery<any[]>({ queryKey: ["/api/medications"] });
 
   const filtered = meds.filter(m => {
@@ -104,13 +106,14 @@ export default function Medications() {
                 <th className="text-left text-xs font-medium text-muted-foreground px-4 py-2.5">補貨點</th>
                 <th className="text-left text-xs font-medium text-muted-foreground px-4 py-2.5">儲存條件</th>
                 <th className="text-left text-xs font-medium text-muted-foreground px-4 py-2.5">單位</th>
+                <th className="text-right text-xs font-medium text-muted-foreground px-4 py-2.5 w-16">編輯</th>
               </tr>
             </thead>
             <tbody>
               {isLoading
                 ? [...Array(5)].map((_, i) => (
                   <tr key={i} className="border-b border-border">
-                    <td colSpan={6} className="px-4 py-3"><Skeleton className="h-4 w-full" /></td>
+                    <td colSpan={7} className="px-4 py-3"><Skeleton className="h-4 w-full" /></td>
                   </tr>
                 ))
                 : filtered.map((m: any) => (
@@ -137,6 +140,16 @@ export default function Medications() {
                       <StorageBadge cond={m.storage_condition || "室溫"} />
                     </td>
                     <td className="px-4 py-3 text-sm text-muted-foreground">{m.unit}</td>
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        onClick={() => setEditing(m)}
+                        className="w-8 h-8 inline-flex items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                        data-testid={`med-edit-${m.id}`}
+                        aria-label="編輯藥品"
+                      >
+                        <Pencil size={15} />
+                      </button>
+                    </td>
                   </tr>
                 ))}
             </tbody>
@@ -146,6 +159,8 @@ export default function Medications() {
           )}
         </div>
       </Card>
+
+      {editing && <EditMedicationModal item={editing} onClose={() => setEditing(null)} />}
     </div>
   );
 }
