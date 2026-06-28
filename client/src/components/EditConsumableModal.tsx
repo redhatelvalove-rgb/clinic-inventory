@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { CATEGORY_ORDER } from "@/lib/consumableCategories";
+import { NURSING_STAFF } from "@/lib/staff";
 
 interface Consumable {
   id: string;
@@ -44,6 +45,8 @@ export default function EditConsumableModal({ item, onClose }: Props) {
   const [unit, setUnit] = useState(UNITS.includes(item.unit) ? item.unit : "__custom__");
   const [customUnit, setCustomUnit] = useState(UNITS.includes(item.unit) ? "" : item.unit);
   const [safetyStock, setSafetyStock] = useState(String(item.safety_stock));
+  const [currentStock, setCurrentStock] = useState(String(item.current_stock));
+  const [adjustedBy, setAdjustedBy] = useState("");
   const [vendorId, setVendorId] = useState(item.vendor_id || "none");
   const [isDurable, setIsDurable] = useState(item.is_durable);
   const [isActive, setIsActive] = useState(item.is_active);
@@ -54,9 +57,13 @@ export default function EditConsumableModal({ item, onClose }: Props) {
   const effectiveCategory = category === "__custom__" ? customCategory : category;
   const effectiveUnit = unit === "__custom__" ? customUnit : unit;
 
+  // 數量是否被改動（決定要不要記錄盤點調整軌跡）
+  const stockChanged = Number(currentStock) !== item.current_stock;
+
   const mutation = useMutation({
     mutationFn: async () => {
-      return apiRequest("PATCH", `/api/consumables/${item.id}`, {
+      // 1) 更新品項基本資料
+      await apiRequest("PATCH", `/api/consumables/${item.id}`, {
         name: name.trim(),
         category: effectiveCategory.trim(),
         unit: effectiveUnit.trim(),
@@ -66,9 +73,18 @@ export default function EditConsumableModal({ item, onClose }: Props) {
         isActive,
         notes: notes.trim() || null,
       });
+      // 2) 數量有變動：透過盤點 API 記錄軌跡（前值→新值、誰、何時，會進盤點紀錄）
+      if (stockChanged) {
+        await apiRequest("POST", "/api/inventory-counts", {
+          countedBy: adjustedBy,
+          notes: "清單編輯調整數量",
+          items: [{ consumableId: item.id, countedStock: Number(currentStock) }],
+        });
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/consumables"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/inventory-counts"] });
       toast({ title: "修改已儲存", description: `「${name}」已更新。` });
       onClose();
     },
@@ -81,6 +97,7 @@ export default function EditConsumableModal({ item, onClose }: Props) {
     if (!name.trim()) { toast({ title: "請輸入品名", variant: "destructive" }); return; }
     if (!effectiveCategory.trim()) { toast({ title: "請選擇或輸入分類", variant: "destructive" }); return; }
     if (!effectiveUnit.trim()) { toast({ title: "請選擇或輸入單位", variant: "destructive" }); return; }
+    if (stockChanged && !adjustedBy) { toast({ title: "請選擇調整人", description: "數量有變動，需記錄是誰調整的。", variant: "destructive" }); return; }
     mutation.mutate();
   };
 
@@ -158,19 +175,55 @@ export default function EditConsumableModal({ item, onClose }: Props) {
             )}
           </div>
 
-          {/* 安全水位 */}
-          <div>
-            <label className="text-sm font-medium mb-1.5 block">安全水位</label>
-            <Input
-              type="number"
-              inputMode="numeric"
-              min={0}
-              value={safetyStock}
-              onChange={e => setSafetyStock(e.target.value)}
-              className="h-11"
-              data-testid="edit-input-safety"
-            />
+          {/* 目前數量 + 安全水位（並排） */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-sm font-medium mb-1.5 block">目前數量</label>
+              <Input
+                type="number"
+                inputMode="numeric"
+                min={0}
+                value={currentStock}
+                onChange={e => setCurrentStock(e.target.value)}
+                className="h-11"
+                data-testid="edit-input-current-stock"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-1.5 block">安全水位</label>
+              <Input
+                type="number"
+                inputMode="numeric"
+                min={0}
+                value={safetyStock}
+                onChange={e => setSafetyStock(e.target.value)}
+                className="h-11"
+                data-testid="edit-input-safety"
+              />
+            </div>
           </div>
+
+          {/* 調整人：只有改了數量才出現（記錄軌跡用） */}
+          {stockChanged && (
+            <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/30 p-3 space-y-1.5">
+              <label className="text-sm font-medium block">
+                調整人 <span className="text-red-500">*</span>
+              </label>
+              <p className="text-xs text-muted-foreground">
+                數量將從 {item.current_stock} 改為 {currentStock || 0}，會記入盤點紀錄。
+              </p>
+              <Select value={adjustedBy} onValueChange={setAdjustedBy}>
+                <SelectTrigger className="h-11" data-testid="edit-select-adjusted-by">
+                  <SelectValue placeholder="— 請選擇調整人 —" />
+                </SelectTrigger>
+                <SelectContent>
+                  {NURSING_STAFF.map(n => (
+                    <SelectItem key={n} value={n}>{n}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           {/* 廠商 */}
           <div>
