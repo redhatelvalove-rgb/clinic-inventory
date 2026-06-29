@@ -14,6 +14,7 @@ import type { Express } from "express";
 import type { Server } from "http";
 import bcrypt from "bcryptjs";
 import { storage } from "./storage";
+import { selectFefoBatches, computeDisposal, computeAdjustmentDelta } from "./inventory-logic";
 import {
   demoAuth,
   requireAuth,
@@ -32,6 +33,8 @@ import {
   updateMedicationSchema,
   stockInSchema,
   stockOutSchema,
+  disposalSchema,
+  adjustmentSchema,
   approveSchema,
   rejectSchema,
   createConsumableSchema,
@@ -255,49 +258,29 @@ export async function registerRoutes(httpServer: Server, app: Express) {
       return res.status(400).json({ error: `庫存不足（現有 ${med.currentStock}，欲出庫 ${body.quantity}）` });
     }
 
-    // ── FEFO 邏輯 ──────────────────────────────────────────────────────────
-    // 取得該藥品所有批次，依到期日升冪（最早到期優先）
-    const allBatches = storage.getBatches(cid, body.medId)
-      .filter(b => b.remainingQty > 0)
-      .sort((a, b) => a.expiryDate.localeCompare(b.expiryDate));
+    // ── FEFO 邏輯（純函式，已排除過期批次）──────────────────────────────────
+    const today = new Date().toISOString().split("T")[0];
+    // getBatches 回傳 snake_case，正規化成 NormBatch 再交給純函式
+    const rawBatches = storage.getBatches(cid, body.medId) as any[];
+    const normBatches = rawBatches.map(b => ({ id: b.id, remainingQty: b.remaining_qty, expiryDate: b.expiry_date }));
 
-    if (allBatches.length === 0) {
-      return res.status(400).json({ error: "無可用批次" });
+    const result = selectFefoBatches(normBatches, body.quantity, today, body.batchId);
+    if (!result.ok) {
+      const msg: Record<string, string> = {
+        NO_BATCH: "無可用批次（可能全數已過期，請改用報廢）",
+        NOT_FOUND: "指定批次不存在或庫存為 0",
+        EXPIRED: "指定批次已過期，不可出庫（請改用報廢）",
+        BATCH_INSUFFICIENT: `指定批次庫存不足（批次剩 ${result.batchRemaining}，欲出庫 ${body.quantity}）`,
+        INSUFFICIENT: "批次庫存不足以完成出庫",
+      };
+      const status = result.code === "NOT_FOUND" ? 404 : 400;
+      return res.status(status).json({ error: msg[result.code] });
     }
-
-    let remaining = body.quantity;
-    const usedBatches: { batchId: string; qty: number }[] = [];
-
-    // 若前端指定 batchId（人工覆蓋），只扣該批次
-    if (body.batchId) {
-      const targetBatch = allBatches.find(b => b.id === body.batchId);
-      if (!targetBatch) {
-        return res.status(404).json({ error: "指定批次不存在或庫存為 0" });
-      }
-      if (targetBatch.remainingQty < body.quantity) {
-        return res.status(400).json({
-          error: `指定批次庫存不足（批次剩 ${targetBatch.remainingQty}，欲出庫 ${body.quantity}）`,
-        });
-      }
-      usedBatches.push({ batchId: targetBatch.id, qty: body.quantity });
-      remaining = 0;
-    } else {
-      // 自動 FEFO：從最早到期批次開始扣
-      for (const batch of allBatches) {
-        if (remaining <= 0) break;
-        const deduct = Math.min(batch.remainingQty, remaining);
-        usedBatches.push({ batchId: batch.id, qty: deduct });
-        remaining -= deduct;
-      }
-    }
-
-    if (remaining > 0) {
-      return res.status(400).json({ error: "批次庫存不足以完成出庫" });
-    }
+    const usedBatches = result.usedBatches;
 
     // 寫入批次剩餘數量
     for (const { batchId, qty } of usedBatches) {
-      const b = allBatches.find(x => x.id === batchId)!;
+      const b = normBatches.find(x => x.id === batchId)!;
       storage.updateBatchRemaining(batchId, b.remainingQty - qty);
     }
 
@@ -321,6 +304,81 @@ export async function registerRoutes(httpServer: Server, app: Express) {
     }
 
     res.json({ success: true, usedBatches });
+  });
+
+  /**
+   * POST /api/inventory/disposals — 報廢
+   * 將指定批次的數量報廢（過期、破損、汙染等），扣批次剩餘與藥品總庫存，
+   * 並寫一筆 DISPOSAL 交易（留軌跡）。允許對已過期批次報廢。
+   */
+  app.post("/api/inventory/disposals", auth, (req, res) => {
+    const body = parseBody(req, res, disposalSchema);
+    if (!body) return;
+
+    const cid = clinicId(req);
+    const med = storage.getMedicationById(body.medId, cid);
+    if (!med) return res.status(404).json({ error: "找不到藥品" });
+
+    const batch = storage.getBatches(cid, body.medId).find(b => b.id === body.batchId) as any;
+    if (!batch) return res.status(404).json({ error: "找不到批次" });
+    const disp = computeDisposal(batch.remaining_qty, body.quantity);
+    if (!disp.ok) {
+      return res.status(400).json({ error: `批次剩餘不足（剩 ${batch.remaining_qty}，欲報廢 ${body.quantity}）` });
+    }
+
+    storage.updateBatchRemaining(batch.id, disp.newRemaining);
+    storage.updateMedication(body.medId, cid, {
+      currentStock: med.currentStock - body.quantity,
+    });
+    storage.createTransaction({
+      clinicId:    cid,
+      medId:       body.medId,
+      batchId:     batch.id,
+      txnType:     "DISCARD",
+      quantity:    -body.quantity,
+      reason:      body.reason,
+      performedBy: body.performedBy ?? performedBy(req, "報廢"),
+      txnTime:     new Date().toISOString(),
+    });
+
+    res.json({ success: true });
+  });
+
+  /**
+   * POST /api/inventory/adjustments — 手動調整
+   * 將指定批次的剩餘量直接設為新值（盤點修正），差額同步藥品總庫存，
+   * 並寫一筆 ADJUST 交易（留軌跡）。
+   */
+  app.post("/api/inventory/adjustments", auth, (req, res) => {
+    const body = parseBody(req, res, adjustmentSchema);
+    if (!body) return;
+
+    const cid = clinicId(req);
+    const med = storage.getMedicationById(body.medId, cid);
+    if (!med) return res.status(404).json({ error: "找不到藥品" });
+
+    const batch = storage.getBatches(cid, body.medId).find(b => b.id === body.batchId) as any;
+    if (!batch) return res.status(404).json({ error: "找不到批次" });
+
+    const delta = computeAdjustmentDelta(batch.remaining_qty, body.newRemainingQty); // 正=增加，負=減少
+    if (delta === 0) return res.status(400).json({ error: "數量未變動" });
+
+    storage.updateBatchRemaining(batch.id, body.newRemainingQty);
+    storage.updateMedication(body.medId, cid, {
+      currentStock: med.currentStock + delta,
+    });
+    storage.createTransaction({
+      clinicId:    cid,
+      medId:       body.medId,
+      batchId:     batch.id,
+      txnType:     "ADJUST",
+      quantity:    delta,
+      reason:      body.reason,
+      performedBy: body.performedBy ?? performedBy(req, "調整"),
+      txnTime:     new Date().toISOString(),
+    });
+
+    res.json({ success: true });
   });
 
   // ══════════════════════════════════════════════════════════════════════════

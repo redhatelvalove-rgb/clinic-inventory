@@ -76,6 +76,28 @@ export const stockOutSchema = z.object({
   batchId:     z.string().trim().optional().nullable(), // FEFO 可指定批次
 });
 
+// ── 報廢 (Disposal) ──────────────────────────────────────────────────────────────
+// 將指定批次的數量報廢（過期、破損、汙染等），扣批次與總庫存並留軌跡。
+
+export const disposalSchema = z.object({
+  medId:       nonEmpty,
+  batchId:     nonEmpty,
+  quantity:    z.number({ coerce: true }).int().positive("數量必須大於 0"),
+  reason:      nonEmpty, // 報廢原因必填
+  performedBy: z.string().trim().optional(),
+});
+
+// ── 手動調整 (Adjustment) ────────────────────────────────────────────────────────
+// 將指定批次的剩餘量直接設為新值（盤點修正），差額同步總庫存並留軌跡。
+
+export const adjustmentSchema = z.object({
+  medId:           nonEmpty,
+  batchId:         nonEmpty,
+  newRemainingQty: nonNegInt,
+  reason:          nonEmpty, // 調整原因必填
+  performedBy:     z.string().trim().optional(),
+});
+
 // ── 審核 ────────────────────────────────────────────────────────────────────────
 
 export const approveSchema = z.object({

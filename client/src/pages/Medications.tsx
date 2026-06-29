@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { Search, Filter, Pill, Thermometer, AlertTriangle, Pencil } from "lucide-react";
+import { Link } from "wouter";
+import { Search, Filter, Pill, Thermometer, AlertTriangle, Pencil, Clock } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -52,6 +53,8 @@ export default function Medications() {
   const [category, setCategory] = useState("all");
   const [editing, setEditing] = useState<any | null>(null);
   const { data: meds = [], isLoading } = useQuery<any[]>({ queryKey: ["/api/medications"] });
+  const { data: expiringBatches = [] } = useQuery<any[]>({ queryKey: ["/api/batches/expiring"] });
+  const expiringMedIds = new Set(expiringBatches.map((b: any) => b.med_id));
 
   const filtered = meds.filter(m => {
     const matchSearch = !search || m.name.toLowerCase().includes(search.toLowerCase()) || (m.generic_name || "").toLowerCase().includes(search.toLowerCase());
@@ -122,7 +125,14 @@ export default function Medications() {
                       <div className="flex items-center gap-2">
                         <Pill size={13} className="text-primary shrink-0" />
                         <div>
-                          <div className="text-sm font-medium text-foreground">{m.name}</div>
+                          <Link href={`/medications/${m.id}`} className="text-sm font-medium text-foreground hover:text-primary hover:underline" data-testid={`med-link-${m.id}`}>
+                            {m.name}
+                          </Link>
+                          {expiringMedIds.has(m.id) && (
+                            <span className="ml-2 inline-flex items-center gap-0.5 text-[11px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 align-middle">
+                              <Clock size={10} />近效期
+                            </span>
+                          )}
                           {m.generic_name && <div className="text-xs text-muted-foreground">{m.generic_name}</div>}
                         </div>
                       </div>

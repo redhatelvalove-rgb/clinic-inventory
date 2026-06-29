@@ -17,11 +17,13 @@ import CountHistory from "@/pages/CountHistory";
 import AddConsumable from "@/pages/AddConsumable";
 import ExpenseList from "@/pages/ExpenseList";
 import AddExpense from "@/pages/AddExpense";
+import Disposal from "@/pages/Disposal";
+import MedicationDetail from "@/pages/MedicationDetail";
 import NotFound from "@/pages/not-found";
 import {
   LayoutDashboard, Pill, PackagePlus, PackageMinus, Building2,
   ArrowLeftRight, Bell, Sun, Moon, Activity, PlusCircle, Clock,
-  Package, ClipboardList, History, Wallet, FilePlus
+  Package, ClipboardList, History, Wallet, FilePlus, Trash2
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -32,6 +34,7 @@ const medicineItems = [
   { path: "/medications",   icon: Pill,            label: "藥品清單" },
   { path: "/stock-out",     icon: PackageMinus,    label: "出庫" },
   { path: "/stock-in",      icon: PackagePlus,     label: "入庫" },
+  { path: "/disposal",      icon: Trash2,          label: "報廢" },
   { path: "/transactions",  icon: ArrowLeftRight,  label: "交易紀錄" },
   { path: "/vendors",       icon: Building2,       label: "廠商" },
 ];
@@ -264,8 +267,10 @@ export default function App() {
           <Switch>
             <Route path="/"                   component={Dashboard} />
             <Route path="/medications"        component={Medications} />
+            <Route path="/medications/:id"    component={MedicationDetail} />
             <Route path="/stock-out"          component={StockOut} />
             <Route path="/stock-in"           component={StockIn} />
+            <Route path="/disposal"           component={Disposal} />
             <Route path="/transactions"       component={Transactions} />
             <Route path="/vendors"            component={Vendors} />
             <Route path="/add-medication"     component={AddMedication} />
