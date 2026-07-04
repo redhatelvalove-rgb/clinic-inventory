@@ -11,6 +11,9 @@
  */
 
 import type { Express } from "express";
+import express from "express";
+import fs from "node:fs";
+import path from "node:path";
 import type { Server } from "http";
 import bcrypt from "bcryptjs";
 import { storage } from "./storage";
@@ -19,6 +22,7 @@ import { taipeiToday } from "@shared/date-utils";
 import {
   demoAuth,
   requireAuth,
+  requireManager,
   requireSuperAdmin,
   getClinicId,
   signAccessToken,
@@ -42,6 +46,8 @@ import {
   updateConsumableSchema,
   restockConsumableSchema,
   fridgeTempSchema,
+  createDocumentSchema,
+  updateDocumentSchema,
   createInventoryCountSchema,
   createExpenseSchema,
   updateExpenseSchema,
@@ -99,7 +105,7 @@ export async function registerRoutes(httpServer: Server, app: Express) {
     const basePayload = {
       userId:      user.id,
       username:    user.username,
-      role:        user.role as "superadmin" | "staff",
+      role:        user.role as "superadmin" | "manager" | "staff",
       clinicId:    user.clinicId ?? user.clinic_id ?? null,
       displayName: user.displayName ?? user.display_name ?? user.username,
     };
@@ -686,6 +692,110 @@ export async function registerRoutes(httpServer: Server, app: Express) {
     const query = parseQuery(req, res, monthParamSchema);
     if (!query) return;
     res.json(storage.getConsumableMonthlyReport(clinicId(req), query.month));
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 行政文件（公文／會議記錄）── 二樓：requireManager 真 JWT 驗證，不走 Demo。
+  // clinic 範圍用 getClinicId（manager 限自己診所、superadmin 可指定）。
+  // ══════════════════════════════════════════════════════════════════════════
+
+  const UPLOAD_ROOT = path.resolve("uploads");
+  const ALLOWED_EXT = new Set([".pdf", ".jpg", ".jpeg", ".png", ".doc", ".docx", ".xls", ".xlsx"]);
+  const docUser = (req: import("express").Request) => (req as any).user as { username: string; displayName: string; role: string };
+
+  app.get("/api/docs", requireManager, (req, res) => {
+    const type = typeof req.query.type === "string" && req.query.type ? req.query.type : undefined;
+    const year = typeof req.query.year === "string" && req.query.year ? req.query.year : undefined;
+    const q    = typeof req.query.q    === "string" && req.query.q    ? req.query.q    : undefined;
+    res.json(storage.listDocuments(getClinicId(req), { type, year, q }));
+  });
+
+  app.post("/api/docs", requireManager, (req, res) => {
+    const body = parseBody(req, res, createDocumentSchema);
+    if (!body) return;
+    const doc = storage.createDocument({
+      ...body,
+      clinicId:  getClinicId(req),
+      createdBy: docUser(req).displayName,
+    });
+    storage.logDocAccess(doc.id, "create", docUser(req).username);
+    res.json(doc);
+  });
+
+  app.get("/api/docs/:id", requireManager, (req, res) => {
+    const doc = storage.getDocumentById(String(req.params.id), getClinicId(req));
+    if (!doc) return res.status(404).json({ error: "找不到文件" });
+    storage.logDocAccess(doc.id, "view", docUser(req).username);
+    res.json(doc);
+  });
+
+  app.patch("/api/docs/:id", requireManager, (req, res) => {
+    const body = parseBody(req, res, updateDocumentSchema);
+    if (!body) return;
+    if (Object.keys(body).length === 0) return res.status(400).json({ error: "沒有要更新的欄位" });
+    const doc = storage.updateDocument(String(req.params.id), getClinicId(req), body);
+    if (!doc) return res.status(404).json({ error: "找不到文件" });
+    storage.logDocAccess(doc.id, "edit", docUser(req).username);
+    res.json(doc);
+  });
+
+  /** 封存（不實體刪除，保留稽核性） */
+  app.post("/api/docs/:id/archive", requireManager, (req, res) => {
+    const doc = storage.updateDocument(String(req.params.id), getClinicId(req), { isArchived: 1 });
+    if (!doc) return res.status(404).json({ error: "找不到文件" });
+    storage.logDocAccess(doc.id, "archive", docUser(req).username);
+    res.json({ success: true });
+  });
+
+  /** 上傳附件：raw body（非 base64），檔案存磁碟、資料庫只存路徑 */
+  app.post("/api/docs/:id/file", requireManager, express.raw({ type: () => true, limit: "25mb" }), (req, res) => {
+    const cid = getClinicId(req);
+    const doc = storage.getDocumentById(String(req.params.id), cid);
+    if (!doc) return res.status(404).json({ error: "找不到文件" });
+
+    const rawName = decodeURIComponent(String(req.headers["x-file-name"] ?? "attachment.pdf"));
+    const ext = path.extname(rawName).toLowerCase();
+    if (!ALLOWED_EXT.has(ext)) {
+      return res.status(400).json({ error: `不支援的檔案格式（${ext || "無副檔名"}），限 PDF/圖片/Word/Excel` });
+    }
+    const body = req.body as Buffer;
+    if (!Buffer.isBuffer(body) || body.length === 0) {
+      return res.status(400).json({ error: "未收到檔案內容" });
+    }
+
+    const subdir = (doc.doc_date ?? taipeiToday()).slice(0, 7); // uploads/YYYY-MM/
+    const dir = path.join(UPLOAD_ROOT, subdir);
+    fs.mkdirSync(dir, { recursive: true });
+    const storedPath = path.join(dir, `${doc.id}${ext}`);
+    fs.writeFileSync(storedPath, body);
+
+    storage.updateDocument(doc.id, cid, {
+      filePath: path.relative(process.cwd(), storedPath),
+      fileName: rawName,
+      fileSize: body.length,
+      mime:     String(req.headers["content-type"] ?? "application/octet-stream"),
+    });
+    storage.logDocAccess(doc.id, "upload", docUser(req).username);
+    res.json({ success: true, fileName: rawName, fileSize: body.length });
+  });
+
+  /** 下載附件（驗證＋記存取軌跡） */
+  app.get("/api/docs/:id/file", requireManager, (req, res) => {
+    const doc = storage.getDocumentById(String(req.params.id), getClinicId(req));
+    if (!doc) return res.status(404).json({ error: "找不到文件" });
+    if (!doc.file_path) return res.status(404).json({ error: "此文件沒有附件" });
+    const abs = path.resolve(doc.file_path);
+    if (!abs.startsWith(UPLOAD_ROOT)) return res.status(400).json({ error: "檔案路徑異常" });
+    if (!fs.existsSync(abs)) return res.status(404).json({ error: "附件檔案遺失，請聯絡管理者" });
+    storage.logDocAccess(doc.id, "download", docUser(req).username);
+    res.download(abs, doc.file_name ?? "attachment");
+  });
+
+  /** 存取紀錄（僅 superadmin） */
+  app.get("/api/docs/:id/logs", requireManager, requireSuperAdmin, (req, res) => {
+    const doc = storage.getDocumentById(String(req.params.id), getClinicId(req));
+    if (!doc) return res.status(404).json({ error: "找不到文件" });
+    res.json(storage.getDocAccessLogs(doc.id));
   });
 
   app.post("/api/expenses", auth, (req, res) => {

@@ -21,12 +21,13 @@ import Disposal from "@/pages/Disposal";
 import MedicationDetail from "@/pages/MedicationDetail";
 import FridgeTemp from "@/pages/FridgeTemp";
 import Reports from "@/pages/Reports";
+import AdminDocs from "@/pages/AdminDocs";
 import NotFound from "@/pages/not-found";
 import {
   LayoutDashboard, Pill, PackagePlus, PackageMinus, Building2,
   ArrowLeftRight, Bell, Sun, Moon, Activity, PlusCircle, Clock,
   Package, ClipboardList, History, Wallet, FilePlus, Trash2,
-  Thermometer, FileBarChart
+  Thermometer, FileBarChart, FolderLock
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -62,6 +63,10 @@ const expenseItems = [
 const recordItems = [
   { path: "/fridge-temp", icon: Thermometer,  label: "冰箱溫度" },
   { path: "/reports",     icon: FileBarChart, label: "報表中心" },
+];
+
+const adminItems = [
+  { path: "/admin-docs", icon: FolderLock, label: "行政文件" },
 ];
 
 // 手機底部 Tab（常用 5 項）
@@ -171,6 +176,14 @@ function Sidebar() {
         <SectionLabel label="📋 紀錄・報表" />
         <div className="space-y-0.5">
           {recordItems.map(({ path, icon, label }) => (
+            <NavLink key={path} path={path} icon={icon} label={label} />
+          ))}
+        </div>
+
+        {/* 行政區（進入須個人帳號登入） */}
+        <SectionLabel label="🗂 行政管理" />
+        <div className="space-y-0.5">
+          {adminItems.map(({ path, icon, label }) => (
             <NavLink key={path} path={path} icon={icon} label={label} />
           ))}
         </div>
@@ -299,6 +312,7 @@ export default function App() {
             <Route path="/expenses/add"       component={AddExpense} />
             <Route path="/fridge-temp"        component={FridgeTemp} />
             <Route path="/reports"            component={Reports} />
+            <Route path="/admin-docs"         component={AdminDocs} />
             <Route component={NotFound} />
           </Switch>
         </Layout>

@@ -19,13 +19,13 @@ if (process.env.REQUIRE_AUTH === "true") {
 const _secret        = JWT_SECRET        ?? "dev-only-secret-not-for-production";
 const _refreshSecret = JWT_REFRESH_SECRET ?? "dev-only-refresh-secret-not-for-production";
 
-export const ACCESS_TOKEN_EXPIRES  = "1h";   // 短效 access token
+export const ACCESS_TOKEN_EXPIRES  = "8h";   // access token（行政區一個工作天內免重登）
 export const REFRESH_TOKEN_EXPIRES = "30d";  // 長效 refresh token（平板常駐）
 
 export interface JwtPayload {
   userId: string;
   username: string;
-  role: "superadmin" | "staff";
+  role: "superadmin" | "manager" | "staff";
   clinicId: string | null;
   displayName: string;
   type: "access" | "refresh";
@@ -87,6 +87,17 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
   }
   (req as any).user = payload;
   next();
+}
+
+/** Role guard：行政區——manager（限自己診所）與 superadmin 可進 */
+export function requireManager(req: Request, res: Response, next: NextFunction) {
+  requireAuth(req, res, () => {
+    const user = (req as any).user as JwtPayload;
+    if (user.role !== "manager" && user.role !== "superadmin") {
+      return res.status(403).json({ error: "此區僅限授權人員使用" });
+    }
+    next();
+  });
 }
 
 /** Role guard：只允許 superadmin */

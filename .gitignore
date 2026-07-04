@@ -9,3 +9,13 @@ data.db-wal
 
 # 個資：護理人員真實姓名（本機專用，不得提交）
 client/src/lib/staff.local.ts
+
+# 行政文件附件（含敏感內容，絕不進 git）
+uploads/
+
+# 備份與雜項
+*.bak
+*.dump
+data.db.backup*
+.DS_Store
+*.log

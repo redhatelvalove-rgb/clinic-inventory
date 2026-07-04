@@ -146,6 +146,31 @@ sqlite.exec(`
     recorded_at TEXT NOT NULL,
     UNIQUE(clinic_id, log_date, slot)
   );
+  CREATE TABLE IF NOT EXISTS documents (
+    id TEXT PRIMARY KEY,
+    clinic_id TEXT NOT NULL DEFAULT 'C001',
+    doc_type TEXT NOT NULL,
+    title TEXT NOT NULL,
+    doc_number TEXT,
+    doc_date TEXT,
+    content TEXT,
+    tags TEXT,
+    file_path TEXT,
+    file_name TEXT,
+    file_size INTEGER,
+    mime TEXT,
+    created_by TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT,
+    is_archived INTEGER DEFAULT 0
+  );
+  CREATE TABLE IF NOT EXISTS doc_access_logs (
+    id TEXT PRIMARY KEY,
+    doc_id TEXT NOT NULL,
+    action TEXT NOT NULL,
+    username TEXT NOT NULL,
+    at TEXT NOT NULL
+  );
 `);
 
 // ── Seed 三間診所 + 帳號 ─────────────────────────────────────────────────────
@@ -373,6 +398,13 @@ export interface IStorage {
   // 報表
   getCategoryMonthlyReport(clinicId: string, month: string, category: string): any;
   getConsumableMonthlyReport(clinicId: string, month: string): any[];
+  // 行政文件
+  createDocument(data: any): any;
+  updateDocument(id: string, clinicId: string, data: Record<string, any>): any;
+  listDocuments(clinicId: string, opts: { type?: string; year?: string; q?: string }): any[];
+  getDocumentById(id: string, clinicId: string): any;
+  logDocAccess(docId: string, action: string, username: string): void;
+  getDocAccessLogs(docId: string): any[];
   // Auth
   getUserByUsername(username: string): User | undefined;
   // Clinics
@@ -538,6 +570,47 @@ export const storage: IStorage = {
 
   getUserByUsername(username) {
     return sqlite.prepare("SELECT * FROM users WHERE username = ? AND is_active = 1").get(username) as User | undefined;
+  },
+
+  // ── 行政文件 ─────────────────────────────────────────────────────────────
+  createDocument(data) {
+    const id = "DOC-" + randomUUID().slice(0, 8).toUpperCase();
+    sqlite.prepare(`
+      INSERT INTO documents (id, clinic_id, doc_type, title, doc_number, doc_date, content, tags, created_by, created_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?)
+    `).run(id, data.clinicId, data.docType, data.title, data.docNumber ?? null, data.docDate ?? null,
+           data.content ?? null, data.tags ?? null, data.createdBy, new Date().toISOString());
+    return sqlite.prepare("SELECT * FROM documents WHERE id=?").get(id);
+  },
+  updateDocument(id, clinicId, data) {
+    const keys = Object.keys(data);
+    if (keys.length === 0) return this.getDocumentById(id, clinicId);
+    return sqlite.prepare(
+      `UPDATE documents SET ${keys.map(k => `${toSnake(k)} = ?`).join(", ")}, updated_at=? WHERE id=? AND clinic_id=? RETURNING *`
+    ).get(...Object.values(data), new Date().toISOString(), id, clinicId);
+  },
+  listDocuments(clinicId, opts) {
+    let q = "SELECT id, clinic_id, doc_type, title, doc_number, doc_date, tags, file_name, file_size, created_by, created_at, is_archived, (content IS NOT NULL) AS has_content, (file_path IS NOT NULL) AS has_file FROM documents WHERE clinic_id=? AND is_archived=0";
+    const params: any[] = [clinicId];
+    if (opts.type) { q += " AND doc_type=?"; params.push(opts.type); }
+    if (opts.year) { q += " AND substr(COALESCE(doc_date, created_at),1,4)=?"; params.push(opts.year); }
+    if (opts.q) {
+      q += " AND (title LIKE ? OR doc_number LIKE ? OR tags LIKE ? OR content LIKE ?)";
+      const like = `%${opts.q}%`;
+      params.push(like, like, like, like);
+    }
+    q += " ORDER BY COALESCE(doc_date, created_at) DESC, created_at DESC LIMIT 500";
+    return sqlite.prepare(q).all(...params) as any[];
+  },
+  getDocumentById(id, clinicId) {
+    return sqlite.prepare("SELECT * FROM documents WHERE id=? AND clinic_id=?").get(id, clinicId);
+  },
+  logDocAccess(docId, action, username) {
+    sqlite.prepare("INSERT INTO doc_access_logs (id, doc_id, action, username, at) VALUES (?,?,?,?,?)")
+      .run("DAL-" + randomUUID().slice(0, 8).toUpperCase(), docId, action, username, new Date().toISOString());
+  },
+  getDocAccessLogs(docId) {
+    return sqlite.prepare("SELECT * FROM doc_access_logs WHERE doc_id=? ORDER BY at DESC LIMIT 200").all(docId) as any[];
   },
 
   getClinics() {

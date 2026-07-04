@@ -134,6 +134,16 @@ const inventoryCountItemSchema = z.object({
   countedStock: nonNegNum,
 });
 
+export const createDocumentSchema = z.object({
+  docType:   z.enum(["公文收文", "公文發文", "會議記錄", "合約", "其他"], { message: "文件類型不正確" }),
+  title:     z.string().trim().min(1, "請輸入標題").max(200),
+  docNumber: z.string().trim().max(100).optional().nullable(),
+  docDate:   z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "日期格式須為 YYYY-MM-DD").optional().nullable(),
+  content:   z.string().max(50000).optional().nullable(),
+  tags:      z.string().trim().max(200).optional().nullable(),
+});
+export const updateDocumentSchema = createDocumentSchema.partial();
+
 export const fridgeTempSchema = z.object({
   temperature: z.number({ coerce: true }).min(-30, "溫度數值異常").max(50, "溫度數值異常"),
   slot:        z.enum(["AM", "PM"], { message: "時段須為上午或下午" }),

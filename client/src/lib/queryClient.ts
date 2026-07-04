@@ -2,8 +2,10 @@ import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
 const API_BASE = "__PORT_5000__".startsWith("__") ? "" : "__PORT_5000__";
 
-// JWT token：存在 module 層級（不用 localStorage）
-let _token: string | null = null;
+// JWT token：存在 module 層級；行政區登入後由 auth.ts 同步 sessionStorage，
+// 這裡在模組載入時還原（重新整理不掉登入、關閉分頁即登出）
+let _token: string | null =
+  typeof sessionStorage !== "undefined" ? sessionStorage.getItem("cims_admin_token") : null;
 export function setAuthToken(token: string | null) { _token = token; }
 export function getAuthToken() { return _token; }
 
