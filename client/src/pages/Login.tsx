@@ -8,7 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, Lock, User } from "lucide-react";
 
 interface Props {
-  onLogin: (token: string, user: AuthUser) => void;
+  onLogin: (user: AuthUser) => void;
 }
 
 export default function Login({ onLogin }: Props) {
@@ -21,8 +21,9 @@ export default function Login({ onLogin }: Props) {
     e.preventDefault();
     setLoading(true);
     try {
-      const { token, user } = await loginApi(username, password);
-      onLogin(token, user);
+      // loginApi 已內部處理 token 儲存，回傳使用者資料
+      const user = await loginApi(username, password);
+      onLogin(user);
     } catch (err: any) {
       toast({ title: "登入失敗", description: err.message, variant: "destructive" });
     } finally {
