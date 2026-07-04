@@ -172,7 +172,7 @@ export default function Dashboard() {
                       : <ArrowUp size={12} className="text-red-600 dark:text-red-400" />}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <span className="font-medium text-foreground">{t.med_id}</span>
+                    <span className="font-medium text-foreground">{t.med_name || t.med_id}</span>
                     <span className="text-muted-foreground"> · {t.reason}</span>
                   </div>
                   <div className={`mono font-medium text-xs ${t.txn_type === "IN" ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>

@@ -80,7 +80,8 @@ export async function registerRoutes(httpServer: Server, app: Express) {
     const body = parseBody(req, res, loginSchema);
     if (!body) return;
 
-    const user = storage.getUserByUsername(body.username);
+    // raw SQL 回傳 snake_case、型別宣告是 camelCase，故 as any 後雙讀（?? 後備）
+    const user = storage.getUserByUsername(body.username) as any;
     if (!user) {
       return res.status(401).json({ error: "帳號或密碼錯誤" });
     }
@@ -167,11 +168,20 @@ export async function registerRoutes(httpServer: Server, app: Express) {
     res.json(storage.getMedications(clinicId(req)));
   });
 
+  // ⚠️ 靜態路徑必須在 /:id 之前註冊，否則 "pending" 會被當成藥品 id 而 404
+  app.get("/api/medications/pending", auth, (req, res) => {
+    res.json(storage.getPendingMedications(clinicId(req)));
+  });
+
+  app.get("/api/medications/pending/count", auth, (req, res) => {
+    res.json({ count: storage.getPendingCount(clinicId(req)) });
+  });
+
   app.get("/api/medications/:id", auth, (req, res) => {
     const cid = clinicId(req);
-    const med = storage.getMedicationById(req.params.id, cid);
+    const med = storage.getMedicationById(String(req.params.id), cid);
     if (!med) return res.status(404).json({ error: "找不到藥品" });
-    const batches = storage.getBatches(cid, req.params.id);
+    const batches = storage.getBatches(cid, String(req.params.id));
     res.json({ ...med, batches });
   });
 
@@ -185,7 +195,7 @@ export async function registerRoutes(httpServer: Server, app: Express) {
   app.patch("/api/medications/:id", auth, (req, res) => {
     const body = parseBody(req, res, updateMedicationSchema);
     if (!body) return;
-    const med = storage.updateMedication(req.params.id, clinicId(req), body);
+    const med = storage.updateMedication(String(req.params.id), clinicId(req), body);
     if (!med) return res.status(404).json({ error: "找不到藥品" });
     res.json(med);
   });
@@ -209,32 +219,38 @@ export async function registerRoutes(httpServer: Server, app: Express) {
     const cid = clinicId(req);
     const med = storage.getMedicationById(body.medId, cid);
     if (!med) return res.status(404).json({ error: "找不到藥品" });
+    // raw SQL 回傳 snake_case，不可用 med.currentStock（會是 undefined → NaN）
+    const currentStock = (med as any).current_stock as number;
 
-    const batch = storage.createBatch({
-      clinicId:    cid,
-      medId:       body.medId,
-      batchNumber: body.batchNumber,
-      quantity:    body.quantity,
-      remainingQty: body.quantity,
-      expiryDate:  body.expiryDate,
-      receivedDate: new Date().toISOString().split("T")[0],
-      unitCost:    body.unitCost ?? null,
-      poNumber:    body.poNumber ?? null,
-    });
+    const batch = storage.runInTransaction(() => {
+      const batch = storage.createBatch({
+        clinicId:    cid,
+        medId:       body.medId,
+        batchNumber: body.batchNumber,
+        quantity:    body.quantity,
+        remainingQty: body.quantity,
+        expiryDate:  body.expiryDate,
+        receivedDate: new Date().toISOString().split("T")[0],
+        unitCost:    body.unitCost ?? null,
+        poNumber:    body.poNumber ?? null,
+      });
 
-    storage.updateMedication(body.medId, cid, {
-      currentStock: med.currentStock + body.quantity,
-    });
+      storage.updateMedication(body.medId, cid, {
+        currentStock: currentStock + body.quantity,
+      });
 
-    storage.createTransaction({
-      clinicId:    cid,
-      medId:       body.medId,
-      batchId:     batch.id,
-      txnType:     "IN",
-      quantity:    body.quantity,
-      reason:      "入庫",
-      performedBy: body.performedBy ?? performedBy(req, "入庫"),
-      txnTime:     new Date().toISOString(),
+      storage.createTransaction({
+        clinicId:    cid,
+        medId:       body.medId,
+        batchId:     batch.id,
+        txnType:     "IN",
+        quantity:    body.quantity,
+        reason:      "入庫",
+        performedBy: body.performedBy ?? performedBy(req, "入庫"),
+        txnTime:     new Date().toISOString(),
+      });
+
+      return batch;
     });
 
     res.json({ success: true, batch });
@@ -254,8 +270,10 @@ export async function registerRoutes(httpServer: Server, app: Express) {
     const cid = clinicId(req);
     const med = storage.getMedicationById(body.medId, cid);
     if (!med) return res.status(404).json({ error: "找不到藥品" });
-    if (med.currentStock < body.quantity) {
-      return res.status(400).json({ error: `庫存不足（現有 ${med.currentStock}，欲出庫 ${body.quantity}）` });
+    // raw SQL 回傳 snake_case，不可用 med.currentStock（會是 undefined，檢查失效）
+    const currentStock = (med as any).current_stock as number;
+    if (currentStock < body.quantity) {
+      return res.status(400).json({ error: `庫存不足（現有 ${currentStock}，欲出庫 ${body.quantity}）` });
     }
 
     // ── FEFO 邏輯（純函式，已排除過期批次）──────────────────────────────────
@@ -278,30 +296,32 @@ export async function registerRoutes(httpServer: Server, app: Express) {
     }
     const usedBatches = result.usedBatches;
 
-    // 寫入批次剩餘數量
-    for (const { batchId, qty } of usedBatches) {
-      const b = normBatches.find(x => x.id === batchId)!;
-      storage.updateBatchRemaining(batchId, b.remainingQty - qty);
-    }
+    storage.runInTransaction(() => {
+      // 寫入批次剩餘數量
+      for (const { batchId, qty } of usedBatches) {
+        const b = normBatches.find(x => x.id === batchId)!;
+        storage.updateBatchRemaining(batchId, b.remainingQty - qty);
+      }
 
-    // 更新藥品總庫存
-    storage.updateMedication(body.medId, cid, {
-      currentStock: med.currentStock - body.quantity,
-    });
-
-    // 記錄交易（每個批次一筆）
-    for (const { batchId, qty } of usedBatches) {
-      storage.createTransaction({
-        clinicId:    cid,
-        medId:       body.medId,
-        batchId,
-        txnType:     "OUT",
-        quantity:    -qty,
-        reason:      body.reason ?? "出庫",
-        performedBy: body.performedBy ?? performedBy(req, "出庫"),
-        txnTime:     new Date().toISOString(),
+      // 更新藥品總庫存
+      storage.updateMedication(body.medId, cid, {
+        currentStock: currentStock - body.quantity,
       });
-    }
+
+      // 記錄交易（每個批次一筆）
+      for (const { batchId, qty } of usedBatches) {
+        storage.createTransaction({
+          clinicId:    cid,
+          medId:       body.medId,
+          batchId,
+          txnType:     "OUT",
+          quantity:    -qty,
+          reason:      body.reason ?? "出庫",
+          performedBy: body.performedBy ?? performedBy(req, "出庫"),
+          txnTime:     new Date().toISOString(),
+        });
+      }
+    });
 
     res.json({ success: true, usedBatches });
   });
@@ -326,19 +346,23 @@ export async function registerRoutes(httpServer: Server, app: Express) {
       return res.status(400).json({ error: `批次剩餘不足（剩 ${batch.remaining_qty}，欲報廢 ${body.quantity}）` });
     }
 
-    storage.updateBatchRemaining(batch.id, disp.newRemaining);
-    storage.updateMedication(body.medId, cid, {
-      currentStock: med.currentStock - body.quantity,
-    });
-    storage.createTransaction({
-      clinicId:    cid,
-      medId:       body.medId,
-      batchId:     batch.id,
-      txnType:     "DISCARD",
-      quantity:    -body.quantity,
-      reason:      body.reason,
-      performedBy: body.performedBy ?? performedBy(req, "報廢"),
-      txnTime:     new Date().toISOString(),
+    // raw SQL 回傳 snake_case，不可用 med.currentStock
+    const currentStock = (med as any).current_stock as number;
+    storage.runInTransaction(() => {
+      storage.updateBatchRemaining(batch.id, disp.newRemaining);
+      storage.updateMedication(body.medId, cid, {
+        currentStock: currentStock - body.quantity,
+      });
+      storage.createTransaction({
+        clinicId:    cid,
+        medId:       body.medId,
+        batchId:     batch.id,
+        txnType:     "DISCARD",
+        quantity:    -body.quantity,
+        reason:      body.reason,
+        performedBy: body.performedBy ?? performedBy(req, "報廢"),
+        txnTime:     new Date().toISOString(),
+      });
     });
 
     res.json({ success: true });
@@ -363,19 +387,23 @@ export async function registerRoutes(httpServer: Server, app: Express) {
     const delta = computeAdjustmentDelta(batch.remaining_qty, body.newRemainingQty); // 正=增加，負=減少
     if (delta === 0) return res.status(400).json({ error: "數量未變動" });
 
-    storage.updateBatchRemaining(batch.id, body.newRemainingQty);
-    storage.updateMedication(body.medId, cid, {
-      currentStock: med.currentStock + delta,
-    });
-    storage.createTransaction({
-      clinicId:    cid,
-      medId:       body.medId,
-      batchId:     batch.id,
-      txnType:     "ADJUST",
-      quantity:    delta,
-      reason:      body.reason,
-      performedBy: body.performedBy ?? performedBy(req, "調整"),
-      txnTime:     new Date().toISOString(),
+    // raw SQL 回傳 snake_case，不可用 med.currentStock
+    const currentStock = (med as any).current_stock as number;
+    storage.runInTransaction(() => {
+      storage.updateBatchRemaining(batch.id, body.newRemainingQty);
+      storage.updateMedication(body.medId, cid, {
+        currentStock: currentStock + delta,
+      });
+      storage.createTransaction({
+        clinicId:    cid,
+        medId:       body.medId,
+        batchId:     batch.id,
+        txnType:     "ADJUST",
+        quantity:    delta,
+        reason:      body.reason,
+        performedBy: body.performedBy ?? performedBy(req, "調整"),
+        txnTime:     new Date().toISOString(),
+      });
     });
 
     res.json({ success: true });
@@ -425,19 +453,11 @@ export async function registerRoutes(httpServer: Server, app: Express) {
     res.json(med);
   });
 
-  app.get("/api/medications/pending", auth, (req, res) => {
-    res.json(storage.getPendingMedications(clinicId(req)));
-  });
-
-  app.get("/api/medications/pending/count", auth, (req, res) => {
-    res.json({ count: storage.getPendingCount(clinicId(req)) });
-  });
-
   app.post("/api/medications/:id/approve", auth, (req, res) => {
     const body = parseBody(req, res, approveSchema);
     if (!body) return;
     const med = storage.approveMedication(
-      req.params.id,
+      String(req.params.id),
       clinicId(req),
       body.reviewedBy ?? performedBy(req, "管理者")
     );
@@ -449,7 +469,7 @@ export async function registerRoutes(httpServer: Server, app: Express) {
     const body = parseBody(req, res, rejectSchema);
     if (!body) return;
     const med = storage.rejectMedication(
-      req.params.id,
+      String(req.params.id),
       clinicId(req),
       body.reviewedBy ?? performedBy(req, "管理者"),
       body.reason ?? "不符合規格"
@@ -476,7 +496,7 @@ export async function registerRoutes(httpServer: Server, app: Express) {
   });
 
   app.get("/api/consumables/:id", auth, (req, res) => {
-    const sup = storage.getConsumableById(req.params.id, clinicId(req));
+    const sup = storage.getConsumableById(String(req.params.id), clinicId(req));
     if (!sup) return res.status(404).json({ error: "找不到該品項" });
     res.json(sup);
   });
@@ -502,7 +522,7 @@ export async function registerRoutes(httpServer: Server, app: Express) {
   app.patch("/api/consumables/:id", auth, (req, res) => {
     const body = parseBody(req, res, updateConsumableSchema);
     if (!body) return;
-    const sup = storage.updateConsumable(req.params.id, clinicId(req), body);
+    const sup = storage.updateConsumable(String(req.params.id), clinicId(req), body);
     if (!sup) return res.status(404).json({ error: "找不到該品項" });
     res.json(sup);
   });
@@ -517,7 +537,7 @@ export async function registerRoutes(httpServer: Server, app: Express) {
   });
 
   app.get("/api/inventory-counts/:id", auth, (req, res) => {
-    const count = storage.getInventoryCountById(req.params.id, clinicId(req));
+    const count = storage.getInventoryCountById(String(req.params.id), clinicId(req));
     if (!count) return res.status(404).json({ error: "找不到盤點紀錄" });
     res.json(count);
   });
@@ -554,7 +574,7 @@ export async function registerRoutes(httpServer: Server, app: Express) {
   });
 
   app.get("/api/expenses/:id", auth, (req, res) => {
-    const item = storage.getExpenseById(req.params.id, clinicId(req));
+    const item = storage.getExpenseById(String(req.params.id), clinicId(req));
     if (!item) return res.status(404).json({ error: "找不到該費用紀錄" });
     // 回傳時移除 receipt_photo（大 base64）以節省頻寬；前端需要時另呼叫 /photo
     const { receipt_photo, ...rest } = item as any;
@@ -563,7 +583,7 @@ export async function registerRoutes(httpServer: Server, app: Express) {
 
   /** GET /api/expenses/:id/photo — 單獨取得憑證照片 */
   app.get("/api/expenses/:id/photo", auth, (req, res) => {
-    const item = storage.getExpenseById(req.params.id, clinicId(req));
+    const item = storage.getExpenseById(String(req.params.id), clinicId(req));
     if (!item) return res.status(404).json({ error: "找不到該費用紀錄" });
     if (!(item as any).receipt_photo) {
       return res.status(404).json({ error: "此紀錄無憑證照片" });
@@ -591,13 +611,13 @@ export async function registerRoutes(httpServer: Server, app: Express) {
   app.patch("/api/expenses/:id", auth, (req, res) => {
     const body = parseBody(req, res, updateExpenseSchema);
     if (!body) return;
-    const item = storage.updateExpense(req.params.id, clinicId(req), body as any);
+    const item = storage.updateExpense(String(req.params.id), clinicId(req), body as any);
     if (!item) return res.status(404).json({ error: "找不到該費用紀錄" });
     res.json(item);
   });
 
   app.delete("/api/expenses/:id", auth, (req, res) => {
-    const ok = storage.deleteExpense(req.params.id, clinicId(req));
+    const ok = storage.deleteExpense(String(req.params.id), clinicId(req));
     if (!ok) return res.status(404).json({ error: "找不到該費用紀錄" });
     res.json({ success: true });
   });

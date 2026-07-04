@@ -190,7 +190,7 @@ export default function AddConsumable() {
               <SelectContent>
                 <SelectItem value="none">不指定</SelectItem>
                 {vendors.map((v: Vendor) => (
-                  <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
+                  <SelectItem key={v.id} value={v.id}>{(v as any).company_name || v.name}</SelectItem>
                 ))}
               </SelectContent>
             </Select>

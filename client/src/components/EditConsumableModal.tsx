@@ -48,8 +48,9 @@ export default function EditConsumableModal({ item, onClose }: Props) {
   const [currentStock, setCurrentStock] = useState(String(item.current_stock));
   const [adjustedBy, setAdjustedBy] = useState("");
   const [vendorId, setVendorId] = useState(item.vendor_id || "none");
-  const [isDurable, setIsDurable] = useState(item.is_durable);
-  const [isActive, setIsActive] = useState(item.is_active);
+  // SQLite 回傳 0/1，須轉真布林，否則後端 z.boolean() 驗證會 400
+  const [isDurable, setIsDurable] = useState(Boolean(item.is_durable));
+  const [isActive, setIsActive] = useState(Boolean(item.is_active));
   const [notes, setNotes] = useState(item.notes || "");
 
   const { data: vendors = [] } = useQuery<Vendor[]>({ queryKey: ["/api/vendors"] });
@@ -235,7 +236,7 @@ export default function EditConsumableModal({ item, onClose }: Props) {
               <SelectContent>
                 <SelectItem value="none">不指定</SelectItem>
                 {vendors.map((v: Vendor) => (
-                  <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
+                  <SelectItem key={v.id} value={v.id}>{(v as any).company_name || v.name}</SelectItem>
                 ))}
               </SelectContent>
             </Select>

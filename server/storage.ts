@@ -351,6 +351,8 @@ if (supCount === 0) {
 
 // ── Storage Interface ─────────────────────────────────────────────────────────
 export interface IStorage {
+  // Transaction：多步驟寫入必須包在同一個交易內，任一步失敗全部回滾
+  runInTransaction<T>(fn: () => T): T;
   // Auth
   getUserByUsername(username: string): User | undefined;
   // Clinics
@@ -406,6 +408,10 @@ export interface IStorage {
 }
 
 export const storage: IStorage = {
+  runInTransaction(fn) {
+    return sqlite.transaction(fn)();
+  },
+
   getUserByUsername(username) {
     return sqlite.prepare("SELECT * FROM users WHERE username = ? AND is_active = 1").get(username) as User | undefined;
   },
@@ -458,8 +464,9 @@ export const storage: IStorage = {
   },
 
   getTransactions(clinicId, medId) {
-    if (medId) return sqlite.prepare("SELECT * FROM transactions WHERE clinic_id = ? AND med_id = ? ORDER BY txn_time DESC LIMIT 50").all(clinicId, medId) as Transaction[];
-    return sqlite.prepare("SELECT * FROM transactions WHERE clinic_id = ? ORDER BY txn_time DESC LIMIT 100").all(clinicId) as Transaction[];
+    // LEFT JOIN 帶出藥品名稱（med_name），前端交易頁與 CSV 匯出需要
+    if (medId) return sqlite.prepare("SELECT t.*, m.name AS med_name FROM transactions t LEFT JOIN medications m ON m.id = t.med_id WHERE t.clinic_id = ? AND t.med_id = ? ORDER BY t.txn_time DESC LIMIT 50").all(clinicId, medId) as Transaction[];
+    return sqlite.prepare("SELECT t.*, m.name AS med_name FROM transactions t LEFT JOIN medications m ON m.id = t.med_id WHERE t.clinic_id = ? ORDER BY t.txn_time DESC LIMIT 100").all(clinicId) as Transaction[];
   },
   createTransaction(data) {
     const id = "TXN-" + randomUUID().slice(0, 8).toUpperCase();
@@ -604,25 +611,28 @@ export const storage: IStorage = {
   },
 
   createInventoryCount(data) {
-    const countId = "CNT-" + randomUUID().slice(0, 8).toUpperCase();
-    const now = new Date().toISOString();
+    // 主檔＋逐項寫入包在同一交易，避免中途失敗留下半套盤點
+    return sqlite.transaction(() => {
+      const countId = "CNT-" + randomUUID().slice(0, 8).toUpperCase();
+      const now = new Date().toISOString();
 
-    sqlite.prepare(
-      "INSERT INTO inventory_counts (id, clinic_id, counted_at, counted_by, notes) VALUES (?,?,?,?,?)"
-    ).run(countId, data.clinicId, now, data.countedBy, data.notes || null);
-
-    for (const item of data.items) {
-      const prev = (sqlite.prepare("SELECT current_stock FROM consumables WHERE id=?").get(item.consumableId) as any)?.current_stock ?? 0;
-      const consumed = Math.max(0, prev - item.countedStock);
-      const itemId = "ITM-" + randomUUID().slice(0, 8).toUpperCase();
       sqlite.prepare(
-        "INSERT INTO inventory_count_items (id, count_id, consumable_id, previous_stock, counted_stock, consumed) VALUES (?,?,?,?,?,?)"
-      ).run(itemId, countId, item.consumableId, prev, item.countedStock, consumed);
-      // 更新衛材現存量
-      sqlite.prepare("UPDATE consumables SET current_stock=? WHERE id=?").run(item.countedStock, item.consumableId);
-    }
+        "INSERT INTO inventory_counts (id, clinic_id, counted_at, counted_by, notes) VALUES (?,?,?,?,?)"
+      ).run(countId, data.clinicId, now, data.countedBy, data.notes || null);
 
-    return sqlite.prepare("SELECT * FROM inventory_counts WHERE id=?").get(countId) as InventoryCount;
+      for (const item of data.items) {
+        const prev = (sqlite.prepare("SELECT current_stock FROM consumables WHERE id=?").get(item.consumableId) as any)?.current_stock ?? 0;
+        const consumed = Math.max(0, prev - item.countedStock);
+        const itemId = "ITM-" + randomUUID().slice(0, 8).toUpperCase();
+        sqlite.prepare(
+          "INSERT INTO inventory_count_items (id, count_id, consumable_id, previous_stock, counted_stock, consumed) VALUES (?,?,?,?,?,?)"
+        ).run(itemId, countId, item.consumableId, prev, item.countedStock, consumed);
+        // 更新衛材現存量
+        sqlite.prepare("UPDATE consumables SET current_stock=? WHERE id=?").run(item.countedStock, item.consumableId);
+      }
+
+      return sqlite.prepare("SELECT * FROM inventory_counts WHERE id=?").get(countId) as InventoryCount;
+    })();
   },
 
   // ── 費用記錄實作 ───────────────────────────────────────────────────────

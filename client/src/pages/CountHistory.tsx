@@ -6,27 +6,28 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { apiRequest } from "@/lib/queryClient";
 
+// 後端 API 回傳 snake_case（SELECT ic.* / ici.*），僅 itemCount、consumableName 是 SQL 別名
 interface CountSummary {
   id: string;
-  clinicId: string;
-  countedAt: string;
-  countedBy: string;
+  clinic_id: string;
+  counted_at: string;
+  counted_by: string;
   notes: string | null;
   itemCount: number;
 }
 
 interface CountDetail {
   id: string;
-  countedAt: string;
-  countedBy: string;
+  counted_at: string;
+  counted_by: string;
   notes: string | null;
   items: {
     id: string;
-    consumableId: string;
+    consumable_id: string;
     consumableName: string;
     unit: string;
-    previousStock: number;
-    countedStock: number;
+    previous_stock: number;
+    counted_stock: number;
     consumed: number;
   }[];
 }
@@ -53,9 +54,9 @@ function CountDetailPanel({ countId }: { countId: string }) {
 
   if (!data) return null;
 
-  // 只顯示有變動的品項（consumed > 0 或 countedStock 與 previousStock 不同）
-  const changedItems = data.items.filter(i => i.consumed !== 0 || i.countedStock !== i.previousStock);
-  const unchangedItems = data.items.filter(i => i.consumed === 0 && i.countedStock === i.previousStock);
+  // 只顯示有變動的品項（consumed > 0 或 counted_stock 與 previous_stock 不同）
+  const changedItems = data.items.filter(i => i.consumed !== 0 || i.counted_stock !== i.previous_stock);
+  const unchangedItems = data.items.filter(i => i.consumed === 0 && i.counted_stock === i.previous_stock);
 
   return (
     <div className="px-4 pb-4 space-y-3">
@@ -74,7 +75,7 @@ function CountDetailPanel({ countId }: { countId: string }) {
               <div key={item.id} className="flex items-center gap-2 text-sm py-1.5 px-2 rounded hover:bg-muted/30 transition-colors" data-testid={`history-item-${item.id}`}>
                 <span className="flex-1 truncate font-medium">{item.consumableName}</span>
                 <span className="text-muted-foreground tabular-nums">
-                  {item.previousStock} → {item.countedStock} {item.unit}
+                  {item.previous_stock} → {item.counted_stock} {item.unit}
                 </span>
                 {item.consumed > 0 && (
                   <div className="flex items-center gap-1 text-amber-600 dark:text-amber-400 flex-shrink-0">
@@ -82,7 +83,7 @@ function CountDetailPanel({ countId }: { countId: string }) {
                     <span className="text-xs">−{item.consumed}</span>
                   </div>
                 )}
-                {item.countedStock > item.previousStock && (
+                {item.counted_stock > item.previous_stock && (
                   <Badge className="text-xs bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 flex-shrink-0">補貨</Badge>
                 )}
               </div>
@@ -147,7 +148,7 @@ export default function CountHistory() {
                       <div className="flex items-center gap-2 flex-wrap">
                         <div className="flex items-center gap-1.5 text-sm font-medium">
                           <User className="w-3.5 h-3.5 text-muted-foreground" />
-                          {count.countedBy}
+                          {count.counted_by}
                         </div>
                         <Badge variant="outline" className="text-xs">
                           {count.itemCount} 項
@@ -155,7 +156,7 @@ export default function CountHistory() {
                       </div>
                       <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                         <Calendar className="w-3.5 h-3.5" />
-                        {formatDate(count.countedAt)}
+                        {formatDate(count.counted_at)}
                       </div>
                       {count.notes && (
                         <p className="text-xs text-muted-foreground truncate">{count.notes}</p>

@@ -62,7 +62,7 @@ export default function Medications() {
     return matchSearch && matchCat;
   });
 
-  const categories = [...new Set(meds.map((m: any) => m.category))];
+  const categories = Array.from(new Set(meds.map((m: any) => m.category)));
 
   return (
     <div className="space-y-4 max-w-6xl">
