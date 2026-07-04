@@ -45,6 +45,7 @@ export default function StockOut() {
   const fefoBatch = usableBatches[0];
   const isOverride = batchId !== "" && fefoBatch && batchId !== fefoBatch.id;
 
+  const isBelow = selectedMed && selectedMed.current_stock < selectedMed.safety_stock;
   const isLow = selectedMed && selectedMed.current_stock <= selectedMed.safety_stock;
   const isInsufficient = selectedMed && selectedMed.current_stock < quantity;
 
@@ -151,7 +152,7 @@ export default function StockOut() {
             {isLow && <AlertTriangle size={13} />}
             目前庫存：<span className="font-semibold">{selectedMed.current_stock} {selectedMed.unit}</span>
             　安全庫量：{selectedMed.safety_stock} {selectedMed.unit}
-            {isLow && "　⚠ 低於安全庫存"}
+            {isLow && (isBelow ? "　⚠ 低於安全庫存" : "　⚠ 已達安全量")}
           </div>
         )}
 

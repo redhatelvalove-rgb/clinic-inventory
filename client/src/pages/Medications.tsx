@@ -29,14 +29,16 @@ function StorageBadge({ cond }: { cond: string }) {
 function StockStatus({ current, safety, reorder }: { current: number; safety: number; reorder?: number }) {
   const max = Math.max(current, (reorder || safety) * 2, 1);
   const pct = Math.min((current / max) * 100, 100);
-  const isLow = current <= safety;
-  const isWarning = !isLow && current <= (reorder || safety * 1.5);
-  const color = isLow ? "bg-red-500" : isWarning ? "bg-amber-500" : "bg-emerald-500";
+  // 兩級警示：低於安全量＝紅（需補貨）、剛好等於＝黃（注意）
+  const isBelow = current < safety;
+  const isAtSafety = current === safety;
+  const isWarning = !isBelow && !isAtSafety && current <= (reorder || safety * 1.5);
+  const color = isBelow ? "bg-red-500" : (isAtSafety || isWarning) ? "bg-amber-500" : "bg-emerald-500";
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between text-xs">
-        <span className={isLow ? "text-red-600 dark:text-red-400 font-medium" : "text-muted-foreground"}>
-          {isLow && <AlertTriangle size={10} className="inline mr-1" />}
+        <span className={isBelow ? "text-red-600 dark:text-red-400 font-medium" : isAtSafety ? "text-amber-600 dark:text-amber-400 font-medium" : "text-muted-foreground"}>
+          {(isBelow || isAtSafety) && <AlertTriangle size={10} className="inline mr-1" />}
           {current}
         </span>
         <span className="text-muted-foreground">安全 {safety}</span>

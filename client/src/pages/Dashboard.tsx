@@ -22,7 +22,7 @@ function ExpiryBadge({ days }: { days: number }) {
 function StockLevel({ current, safety, reorder }: { current: number; safety: number; reorder?: number }) {
   const max = Math.max(current, (reorder || safety) * 2, 1);
   const pct = Math.min((current / max) * 100, 100);
-  const color = current <= safety ? "bg-red-500" : current <= (reorder || safety * 1.5) ? "bg-amber-500" : "bg-emerald-500";
+  const color = current < safety ? "bg-red-500" : current <= (reorder || safety * 1.5) ? "bg-amber-500" : "bg-emerald-500";
   return (
     <div className="stock-bar-track w-full">
       <div className={`stock-bar-fill ${color}`} style={{ width: `${pct}%` }} />
@@ -51,7 +51,7 @@ export default function Dashboard() {
   const statCards = [
     { label: "藥品種類", value: stats.totalMeds, icon: PackageCheck, color: "text-blue-600 dark:text-blue-400", bg: "bg-blue-50 dark:bg-blue-900/20" },
     { label: "30天內到期批次", value: stats.expiringCount, icon: Clock, color: "text-amber-600 dark:text-amber-400", bg: "bg-amber-50 dark:bg-amber-900/20", alert: stats.expiringCount > 0 },
-    { label: "低於安全庫存", value: stats.lowStockCount, icon: TrendingDown, color: "text-red-600 dark:text-red-400", bg: "bg-red-50 dark:bg-red-900/20", alert: stats.lowStockCount > 0 },
+    { label: "庫存警示", value: stats.lowStockCount, icon: TrendingDown, color: "text-red-600 dark:text-red-400", bg: "bg-red-50 dark:bg-red-900/20", alert: stats.lowStockCount > 0 },
     { label: "今日入庫", value: stats.todayIn || 0, icon: ArrowUp, color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-900/20" },
   ];
 
@@ -141,7 +141,7 @@ export default function Dashboard() {
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-semibold flex items-center gap-2">
               <TrendingDown size={14} className="text-red-500" />
-              低於安全庫存
+              庫存警示（達／低於安全量）
               {lowStock.length > 0 && <Badge className="badge-danger border-0 text-xs">{lowStock.length}</Badge>}
             </CardTitle>
           </CardHeader>
@@ -154,7 +154,9 @@ export default function Dashboard() {
                   <div key={m.id} className="px-4 py-2.5" data-testid={`lowstock-row-${m.id}`}>
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-sm font-medium text-foreground">{m.name}</span>
-                      <span className="text-xs text-red-600 dark:text-red-400 font-medium">建議補貨 {m.reorder_qty || m.reorder_point || m.safety_stock} {m.unit}</span>
+                      <span className={`text-xs font-medium ${m.current_stock < m.safety_stock ? "text-red-600 dark:text-red-400" : "text-amber-600 dark:text-amber-400"}`}>
+                        {m.current_stock < m.safety_stock ? "需補貨" : "已達安全量"} {m.reorder_qty || m.reorder_point || m.safety_stock} {m.unit}
+                      </span>
                     </div>
                     <StockLevel current={m.current_stock} safety={m.safety_stock} reorder={m.reorder_point} />
                     <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">

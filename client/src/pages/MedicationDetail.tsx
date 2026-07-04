@@ -45,7 +45,8 @@ export default function MedicationDetail() {
   if (!med) return <div className="max-w-3xl mx-auto py-10 text-sm text-muted-foreground">找不到藥品。<Link href="/medications" className="text-primary ml-2">回藥品清單</Link></div>;
 
   const batches: any[] = (med.batches ?? []).slice().sort((a: any, b: any) => a.expiry_date.localeCompare(b.expiry_date));
-  const isLow = med.current_stock <= med.safety_stock;
+  const isBelow = med.current_stock < med.safety_stock;
+  const isAtSafety = med.current_stock === med.safety_stock;
   const expiredCount = batches.filter(b => b.remaining_qty > 0 && b.expiry_date < today()).length;
   const nearCount = batches.filter(b => b.remaining_qty > 0 && b.expiry_date >= today() && daysTo(b.expiry_date) <= 30).length;
 
@@ -84,7 +85,8 @@ export default function MedicationDetail() {
       {/* 警示 */}
       {(isLow || expiredCount > 0 || nearCount > 0) && (
         <div className="space-y-2">
-          {isLow && <div className="flex items-center gap-2 text-sm rounded-lg px-3 py-2 bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300"><AlertTriangle size={14} />低於安全庫存（{med.current_stock} ≤ {med.safety_stock}）</div>}
+          {isBelow && <div className="flex items-center gap-2 text-sm rounded-lg px-3 py-2 bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300"><AlertTriangle size={14} />低於安全庫存，需補貨（{med.current_stock} ＜ {med.safety_stock}）</div>}
+          {isAtSafety && <div className="flex items-center gap-2 text-sm rounded-lg px-3 py-2 bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300"><AlertTriangle size={14} />已達安全量，建議補貨（{med.current_stock} ＝ {med.safety_stock}）</div>}
           {expiredCount > 0 && <div className="flex items-center gap-2 text-sm rounded-lg px-3 py-2 bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300"><AlertTriangle size={14} />{expiredCount} 個批次已過期，請報廢</div>}
           {nearCount > 0 && <div className="flex items-center gap-2 text-sm rounded-lg px-3 py-2 bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300"><Clock size={14} />{nearCount} 個批次 30 天內到期</div>}
         </div>
