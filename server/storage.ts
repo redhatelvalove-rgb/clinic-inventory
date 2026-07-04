@@ -12,7 +12,7 @@ import type {
   Expense, InsertExpense
 } from "@shared/schema";
 import { randomUUID } from "crypto";
-import { taipeiToday, taipeiDatePlusDays, taipeiDayRangeUtc } from "@shared/date-utils";
+import { taipeiToday, taipeiDatePlusDays, taipeiDayRangeUtc, taipeiMonthRangeUtc } from "@shared/date-utils";
 import bcrypt from "bcryptjs";
 
 const sqlite = new Database("data.db");
@@ -133,6 +133,18 @@ sqlite.exec(`
     receipt_photo TEXT,
     recorded_by TEXT NOT NULL,
     created_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS fridge_temps (
+    id TEXT PRIMARY KEY,
+    clinic_id TEXT NOT NULL DEFAULT 'C001',
+    log_date TEXT NOT NULL,
+    slot TEXT NOT NULL,
+    temperature REAL NOT NULL,
+    abnormal INTEGER NOT NULL DEFAULT 0,
+    action_taken TEXT,
+    recorded_by TEXT NOT NULL,
+    recorded_at TEXT NOT NULL,
+    UNIQUE(clinic_id, log_date, slot)
   );
 `);
 
@@ -354,6 +366,13 @@ if (supCount === 0) {
 export interface IStorage {
   // Transaction：多步驟寫入必須包在同一個交易內，任一步失敗全部回滾
   runInTransaction<T>(fn: () => T): T;
+  // 冰箱溫度
+  upsertFridgeTemp(data: { clinicId: string; logDate: string; slot: string; temperature: number; abnormal: boolean; actionTaken: string | null; recordedBy: string }): any;
+  getFridgeTempsByMonth(clinicId: string, month: string): any[];
+  getFridgeTempsByDate(clinicId: string, date: string): any[];
+  // 報表
+  getCategoryMonthlyReport(clinicId: string, month: string, category: string): any;
+  getConsumableMonthlyReport(clinicId: string, month: string): any[];
   // Auth
   getUserByUsername(username: string): User | undefined;
   // Clinics
@@ -411,6 +430,110 @@ export interface IStorage {
 export const storage: IStorage = {
   runInTransaction(fn) {
     return sqlite.transaction(fn)();
+  },
+
+  // ── 冰箱溫度 ─────────────────────────────────────────────────────────────
+  upsertFridgeTemp(data) {
+    // 同日同時段重複記錄＝覆蓋（護理師打錯可直接重量再送一次）
+    const id = "FT-" + randomUUID().slice(0, 8).toUpperCase();
+    sqlite.prepare(`
+      INSERT INTO fridge_temps (id, clinic_id, log_date, slot, temperature, abnormal, action_taken, recorded_by, recorded_at)
+      VALUES (?,?,?,?,?,?,?,?,?)
+      ON CONFLICT(clinic_id, log_date, slot) DO UPDATE SET
+        temperature=excluded.temperature, abnormal=excluded.abnormal,
+        action_taken=excluded.action_taken, recorded_by=excluded.recorded_by, recorded_at=excluded.recorded_at
+    `).run(id, data.clinicId, data.logDate, data.slot, data.temperature,
+           data.abnormal ? 1 : 0, data.actionTaken, data.recordedBy, new Date().toISOString());
+    return sqlite.prepare("SELECT * FROM fridge_temps WHERE clinic_id=? AND log_date=? AND slot=?")
+      .get(data.clinicId, data.logDate, data.slot);
+  },
+  getFridgeTempsByMonth(clinicId, month) {
+    return sqlite.prepare("SELECT * FROM fridge_temps WHERE clinic_id=? AND log_date LIKE ? ORDER BY log_date, slot")
+      .all(clinicId, month + "%") as any[];
+  },
+  getFridgeTempsByDate(clinicId, date) {
+    return sqlite.prepare("SELECT * FROM fridge_temps WHERE clinic_id=? AND log_date=?").all(clinicId, date) as any[];
+  },
+
+  // ── 報表 ─────────────────────────────────────────────────────────────────
+  /**
+   * 分類月報（衛生局檢查用，預設玻尿酸＝關節注射類）：
+   * 依批次回推期初/期末——期末＝現在剩餘−(月底之後的異動)，期初＝期末−(本月異動)。
+   */
+  getCategoryMonthlyReport(clinicId, month, category) {
+    const { startUtc, endUtc } = taipeiMonthRangeUtc(month);
+    const meds = sqlite.prepare(
+      "SELECT * FROM medications WHERE clinic_id=? AND category=? AND is_active=1 ORDER BY id"
+    ).all(clinicId, category) as any[];
+
+    const rows = meds.map(med => {
+      const batches = sqlite.prepare(
+        "SELECT * FROM med_batches WHERE clinic_id=? AND med_id=? ORDER BY expiry_date"
+      ).all(clinicId, med.id) as any[];
+
+      const batchRows = batches.map(b => {
+        const afterEnd = (sqlite.prepare(
+          "SELECT COALESCE(SUM(quantity),0) AS q FROM transactions WHERE batch_id=? AND txn_time >= ?"
+        ).get(b.id, endUtc) as any).q;
+        const byType = sqlite.prepare(
+          "SELECT txn_type, COALESCE(SUM(quantity),0) AS q FROM transactions WHERE batch_id=? AND txn_time >= ? AND txn_time < ? GROUP BY txn_type"
+        ).all(b.id, startUtc, endUtc) as any[];
+        const t: Record<string, number> = {};
+        for (const r of byType) t[r.txn_type] = r.q;
+        const inQty = t["IN"] ?? 0;
+        const outQty = Math.abs(t["OUT"] ?? 0);
+        const discardQty = Math.abs(t["DISCARD"] ?? 0);
+        const adjustQty = t["ADJUST"] ?? 0;
+        const endStock = b.remaining_qty - afterEnd;
+        const startStock = endStock - inQty + outQty + discardQty - adjustQty;
+        return {
+          batchNumber: b.batch_number, expiryDate: b.expiry_date,
+          startStock, inQty, outQty, discardQty, adjustQty, endStock,
+        };
+      });
+
+      return {
+        medId: med.id, name: med.name, unit: med.unit,
+        batches: batchRows,
+        totals: batchRows.reduce((a, r) => ({
+          startStock: a.startStock + r.startStock, inQty: a.inQty + r.inQty,
+          outQty: a.outQty + r.outQty, discardQty: a.discardQty + r.discardQty,
+          adjustQty: a.adjustQty + r.adjustQty, endStock: a.endStock + r.endStock,
+        }), { startStock: 0, inQty: 0, outQty: 0, discardQty: 0, adjustQty: 0, endStock: 0 }),
+      };
+    });
+
+    const details = sqlite.prepare(`
+      SELECT t.txn_time, t.txn_type, t.quantity, t.reason, t.performed_by,
+             m.name AS med_name, b.batch_number
+      FROM transactions t
+      JOIN medications m ON m.id = t.med_id
+      LEFT JOIN med_batches b ON b.id = t.batch_id
+      WHERE t.clinic_id=? AND m.category=? AND t.txn_time >= ? AND t.txn_time < ?
+      ORDER BY t.txn_time
+    `).all(clinicId, category, startUtc, endUtc) as any[];
+
+    return { month, category, meds: rows, details };
+  },
+
+  /** 衛材月報：本月進貨與消耗（來源＝盤點紀錄與進貨軌跡） */
+  getConsumableMonthlyReport(clinicId, month) {
+    const { startUtc, endUtc } = taipeiMonthRangeUtc(month);
+    // 用子查詢限定「本月的盤點事件」，避免 LEFT JOIN 條件失效把整段歷史都加總
+    return sqlite.prepare(`
+      SELECT c.id, c.name, c.category, c.unit, c.current_stock, c.safety_stock,
+        COALESCE((SELECT SUM(ici.consumed) FROM inventory_count_items ici
+          JOIN inventory_counts ic ON ic.id = ici.count_id
+          WHERE ici.consumable_id = c.id AND ic.clinic_id = c.clinic_id
+            AND ic.counted_at >= ? AND ic.counted_at < ?), 0) AS consumed,
+        COALESCE((SELECT SUM(MAX(ici.counted_stock - ici.previous_stock, 0)) FROM inventory_count_items ici
+          JOIN inventory_counts ic ON ic.id = ici.count_id
+          WHERE ici.consumable_id = c.id AND ic.clinic_id = c.clinic_id
+            AND ic.counted_at >= ? AND ic.counted_at < ?), 0) AS restocked
+      FROM consumables c
+      WHERE c.clinic_id=? AND c.is_active=1 AND c.is_durable=0
+      ORDER BY c.category, c.name
+    `).all(startUtc, endUtc, startUtc, endUtc, clinicId) as any[];
   },
 
   getUserByUsername(username) {

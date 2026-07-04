@@ -90,3 +90,13 @@
 /* Stock level bar */
 .stock-bar-track { @apply h-1.5 rounded-full bg-muted; }
 .stock-bar-fill { @apply h-1.5 rounded-full transition-all; }
+
+/* ── 報表列印：只印 .print-area 區塊 ─────────────────────────────────────── */
+@media print {
+  aside, nav, .no-print { display: none !important; }
+  body * { visibility: hidden; }
+  .print-area, .print-area * { visibility: visible; }
+  .print-area { position: absolute; left: 0; top: 0; width: 100%; padding: 0; margin: 0; }
+  .print-area table { page-break-inside: auto; }
+  .print-area tr { page-break-inside: avoid; }
+}

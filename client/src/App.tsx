@@ -19,11 +19,14 @@ import ExpenseList from "@/pages/ExpenseList";
 import AddExpense from "@/pages/AddExpense";
 import Disposal from "@/pages/Disposal";
 import MedicationDetail from "@/pages/MedicationDetail";
+import FridgeTemp from "@/pages/FridgeTemp";
+import Reports from "@/pages/Reports";
 import NotFound from "@/pages/not-found";
 import {
   LayoutDashboard, Pill, PackagePlus, PackageMinus, Building2,
   ArrowLeftRight, Bell, Sun, Moon, Activity, PlusCircle, Clock,
-  Package, ClipboardList, History, Wallet, FilePlus, Trash2
+  Package, ClipboardList, History, Wallet, FilePlus, Trash2,
+  Thermometer, FileBarChart
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -54,6 +57,11 @@ const consumableItems = [
 const expenseItems = [
   { path: "/expenses",     icon: Wallet,    label: "費用清單" },
   { path: "/expenses/add", icon: FilePlus,  label: "記錄費用" },
+];
+
+const recordItems = [
+  { path: "/fridge-temp", icon: Thermometer,  label: "冰箱溫度" },
+  { path: "/reports",     icon: FileBarChart, label: "報表中心" },
 ];
 
 // 手機底部 Tab（常用 5 項）
@@ -155,6 +163,14 @@ function Sidebar() {
         <SectionLabel label="💰 費用管理" />
         <div className="space-y-0.5">
           {expenseItems.map(({ path, icon, label }) => (
+            <NavLink key={path} path={path} icon={icon} label={label} />
+          ))}
+        </div>
+
+        {/* 紀錄與報表 */}
+        <SectionLabel label="📋 紀錄・報表" />
+        <div className="space-y-0.5">
+          {recordItems.map(({ path, icon, label }) => (
             <NavLink key={path} path={path} icon={icon} label={label} />
           ))}
         </div>
@@ -281,6 +297,8 @@ export default function App() {
             <Route path="/count-history"      component={CountHistory} />
             <Route path="/expenses"           component={ExpenseList} />
             <Route path="/expenses/add"       component={AddExpense} />
+            <Route path="/fridge-temp"        component={FridgeTemp} />
+            <Route path="/reports"            component={Reports} />
             <Route component={NotFound} />
           </Switch>
         </Layout>

@@ -38,6 +38,19 @@ export function taipeiDayRangeUtc(dateStr?: string): { startUtc: string; endUtc:
   return { startUtc: start.toISOString(), endUtc: end.toISOString() };
 }
 
+/**
+ * 台北時區某個月（YYYY-MM）對應的 UTC 時間範圍 [startUtc, endUtc)。
+ * 給月報表以 txn_time（UTC ISO）篩選整月交易用。
+ */
+export function taipeiMonthRangeUtc(month: string): { startUtc: string; endUtc: string } {
+  const [y, m] = month.split("-").map(Number);
+  const nextMonth = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, "0")}`;
+  return {
+    startUtc: new Date(`${month}-01T00:00:00+08:00`).toISOString(),
+    endUtc: new Date(`${nextMonth}-01T00:00:00+08:00`).toISOString(),
+  };
+}
+
 /** ISO 時間戳 → 台北時區顯示字串「2026/07/04 14:30」；空值回空字串 */
 export function formatTaipeiDateTime(iso: string | null | undefined): string {
   if (!iso) return "";

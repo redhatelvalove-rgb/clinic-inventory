@@ -4,6 +4,7 @@ import {
   taipeiDatePlusDays,
   taipeiDateOf,
   taipeiDayRangeUtc,
+  taipeiMonthRangeUtc,
   formatTaipeiDateTime,
 } from "../shared/date-utils";
 
@@ -34,6 +35,14 @@ describe("台北時區日期工具", () => {
     // +1 天必須嚴格大於今天（字串比較對 YYYY-MM-DD 成立）
     expect(taipeiDatePlusDays(1) > taipeiToday()).toBe(true);
     expect(taipeiDatePlusDays(30)).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it("taipeiMonthRangeUtc：整月範圍正確，含 12 月跨年", () => {
+    const jul = taipeiMonthRangeUtc("2026-07");
+    expect(jul.startUtc).toBe("2026-06-30T16:00:00.000Z");
+    expect(jul.endUtc).toBe("2026-07-31T16:00:00.000Z");
+    const dec = taipeiMonthRangeUtc("2026-12");
+    expect(dec.endUtc).toBe("2026-12-31T16:00:00.000Z");
   });
 
   it("formatTaipeiDateTime：UTC 時間戳顯示成台北時間", () => {

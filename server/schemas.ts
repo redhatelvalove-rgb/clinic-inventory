@@ -134,6 +134,13 @@ const inventoryCountItemSchema = z.object({
   countedStock: nonNegNum,
 });
 
+export const fridgeTempSchema = z.object({
+  temperature: z.number({ coerce: true }).min(-30, "溫度數值異常").max(50, "溫度數值異常"),
+  slot:        z.enum(["AM", "PM"], { message: "時段須為上午或下午" }),
+  performedBy: nonEmpty,
+  actionTaken: z.string().trim().max(300).optional().nullable(),
+});
+
 export const restockConsumableSchema = z.object({
   quantity:    z.number({ coerce: true }).positive("數量必須大於 0"),
   performedBy: nonEmpty, // 經手人（共用 iPad，留軌跡）

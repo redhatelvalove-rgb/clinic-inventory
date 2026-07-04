@@ -41,6 +41,7 @@ import {
   createConsumableSchema,
   updateConsumableSchema,
   restockConsumableSchema,
+  fridgeTempSchema,
   createInventoryCountSchema,
   createExpenseSchema,
   updateExpenseSchema,
@@ -153,12 +154,17 @@ export async function registerRoutes(httpServer: Server, app: Express) {
     const lowStock           = storage.getLowStockMedications(cid);
     const recentTxns         = storage.getTransactions(cid);
     const lowStockConsumables = storage.getLowStockConsumables(cid);
+    const fridgeLogs = storage.getFridgeTempsByDate(cid, taipeiToday());
     res.json({
       stats,
       expiring,
       lowStock,
       recentTxns: recentTxns.slice(0, 10),
       lowStockConsumables: lowStockConsumables.slice(0, 5),
+      fridgeToday: {
+        am: fridgeLogs.find((l: any) => l.slot === "AM") ?? null,
+        pm: fridgeLogs.find((l: any) => l.slot === "PM") ?? null,
+      },
     });
   });
 
@@ -618,6 +624,68 @@ export async function registerRoutes(httpServer: Server, app: Express) {
       return res.status(404).json({ error: "此紀錄無憑證照片" });
     }
     res.json({ receiptPhoto: (item as any).receipt_photo });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 冰箱溫度（冷藏藥品保存紀錄，2–8°C）
+  // ══════════════════════════════════════════════════════════════════════════
+
+  /** POST /api/fridge-temps — 記錄一次量測（同日同時段重送＝覆蓋修正） */
+  app.post("/api/fridge-temps", auth, (req, res) => {
+    const body = parseBody(req, res, fridgeTempSchema);
+    if (!body) return;
+
+    const abnormal = body.temperature < 2 || body.temperature > 8;
+    if (abnormal && !body.actionTaken?.trim()) {
+      return res.status(400).json({ error: `溫度 ${body.temperature}°C 超出 2–8°C 標準，請填寫異常處理措施（通報誰、藥品移置何處）` });
+    }
+
+    const entry = storage.upsertFridgeTemp({
+      clinicId:    clinicId(req),
+      logDate:     taipeiToday(),
+      slot:        body.slot,
+      temperature: body.temperature,
+      abnormal,
+      actionTaken: abnormal ? body.actionTaken!.trim() : null,
+      recordedBy:  body.performedBy,
+    });
+    res.json({ success: true, entry, abnormal });
+  });
+
+  /** GET /api/fridge-temps?month=YYYY-MM — 整月紀錄（報表用） */
+  app.get("/api/fridge-temps", auth, (req, res) => {
+    const query = parseQuery(req, res, monthParamSchema);
+    if (!query) return;
+    res.json(storage.getFridgeTempsByMonth(clinicId(req), query.month));
+  });
+
+  /** GET /api/fridge-temps/today — 今日兩時段狀態 */
+  app.get("/api/fridge-temps/today", auth, (req, res) => {
+    const logs = storage.getFridgeTempsByDate(clinicId(req), taipeiToday());
+    res.json({
+      date: taipeiToday(),
+      am: logs.find((l: any) => l.slot === "AM") ?? null,
+      pm: logs.find((l: any) => l.slot === "PM") ?? null,
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 報表（衛生局檢查／內部管理，皆可列印）
+  // ══════════════════════════════════════════════════════════════════════════
+
+  /** GET /api/reports/category?month=&category= — 分類進出庫月報（預設玻尿酸＝關節注射） */
+  app.get("/api/reports/category", auth, (req, res) => {
+    const query = parseQuery(req, res, monthParamSchema);
+    if (!query) return;
+    const category = typeof req.query.category === "string" && req.query.category ? req.query.category : "關節注射";
+    res.json(storage.getCategoryMonthlyReport(clinicId(req), query.month, category));
+  });
+
+  /** GET /api/reports/consumables?month= — 衛材月進貨/消耗 */
+  app.get("/api/reports/consumables", auth, (req, res) => {
+    const query = parseQuery(req, res, monthParamSchema);
+    if (!query) return;
+    res.json(storage.getConsumableMonthlyReport(clinicId(req), query.month));
   });
 
   app.post("/api/expenses", auth, (req, res) => {

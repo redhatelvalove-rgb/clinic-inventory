@@ -83,6 +83,24 @@ export default function Dashboard() {
         ))}
       </div>
 
+      {/* 冰箱溫度今日狀態 */}
+      <a href="#/fridge-temp" className="block" data-testid="fridge-banner">
+        <Card className={`border ${(d?.fridgeToday?.am?.abnormal || d?.fridgeToday?.pm?.abnormal) ? "border-red-300" : "border-border"} hover:bg-muted/20 transition-colors`}>
+          <CardContent className="py-3 px-4 flex items-center gap-4 text-sm">
+            <span className="font-medium">🧊 冰箱溫度</span>
+            {(["am", "pm"] as const).map(k => {
+              const log = d?.fridgeToday?.[k];
+              return (
+                <span key={k} className={`flex items-center gap-1 ${!log ? "text-muted-foreground" : log.abnormal ? "text-red-600 dark:text-red-400 font-semibold" : "text-emerald-700 dark:text-emerald-400"}`}>
+                  {k === "am" ? "☀ 上午" : "🌙 下午"}：{log ? `${log.temperature}°C` : "未量"}
+                </span>
+              );
+            })}
+            <span className="ml-auto text-xs text-muted-foreground">標準 2–8°C・點此記錄 ›</span>
+          </CardContent>
+        </Card>
+      </a>
+
       <div className="grid lg:grid-cols-2 gap-6">
         {/* Expiring batches */}
         <Card>
