@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Package, AlertTriangle, Search, Filter, ChevronDown, ChevronUp, Pencil, Plus } from "lucide-react";
+import { Package, AlertTriangle, Search, Filter, ChevronDown, ChevronUp, Pencil, Plus, PackagePlus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { sortCategories, CATEGORY_ORDER } from "@/lib/consumableCategories";
 import EditConsumableModal from "@/components/EditConsumableModal";
+import RestockConsumableModal from "@/components/RestockConsumableModal";
 import { useHashLocation } from "wouter/use-hash-location";
 
 interface Consumable {
@@ -50,6 +51,7 @@ export default function ConsumableList() {
   const [selectedCategory, setSelectedCategory] = useState("全部");
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [editingItem, setEditingItem] = useState<Consumable | null>(null);
+  const [restockItem, setRestockItem] = useState<Consumable | null>(null);
 
   const { data: consumables = [], isLoading } = useQuery<Consumable[]>({
     queryKey: ["/api/consumables"],
@@ -205,6 +207,17 @@ export default function ConsumableList() {
                           </div>
                           <div className="flex-shrink-0 flex items-center gap-2">
                             <StockBadge current={item.current_stock} safety={item.safety_stock} isDurable={item.is_durable} />
+                            {!item.is_durable && (
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); setRestockItem(item); }}
+                                className="h-8 px-2.5 flex items-center gap-1 rounded-md text-xs font-medium text-primary border border-primary/30 hover:bg-primary/10 transition-colors"
+                                data-testid={`btn-restock-${item.id}`}
+                                title="進貨（加庫存）"
+                              >
+                                <PackagePlus className="w-3.5 h-3.5" />進貨
+                              </button>
+                            )}
                             <button
                               type="button"
                               onClick={e => { e.stopPropagation(); setEditingItem(item); }}
@@ -227,6 +240,9 @@ export default function ConsumableList() {
       )}
       {editingItem && (
         <EditConsumableModal item={editingItem} onClose={() => setEditingItem(null)} />
+      )}
+      {restockItem && (
+        <RestockConsumableModal item={restockItem} onClose={() => setRestockItem(null)} />
       )}
     </div>
   );

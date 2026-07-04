@@ -40,6 +40,7 @@ import {
   rejectSchema,
   createConsumableSchema,
   updateConsumableSchema,
+  restockConsumableSchema,
   createInventoryCountSchema,
   createExpenseSchema,
   updateExpenseSchema,
@@ -526,6 +527,33 @@ export async function registerRoutes(httpServer: Server, app: Express) {
     const sup = storage.updateConsumable(String(req.params.id), clinicId(req), body);
     if (!sup) return res.status(404).json({ error: "找不到該品項" });
     res.json(sup);
+  });
+
+  /**
+   * POST /api/consumables/:id/restock — 衛材進貨
+   * 加庫存＋以盤點紀錄留軌跡（前值→新值、經手人、備註「進貨」）。
+   * 定期盤點制下，進貨必須記錄，否則月盤點算出的消耗量會失真。
+   */
+  app.post("/api/consumables/:id/restock", auth, (req, res) => {
+    const body = parseBody(req, res, restockConsumableSchema);
+    if (!body) return;
+
+    const cid = clinicId(req);
+    const sup = storage.getConsumableById(String(req.params.id), cid);
+    if (!sup) return res.status(404).json({ error: "找不到該品項" });
+
+    const prev = Number((sup as any).current_stock) || 0; // raw SQL 回傳 snake_case
+    const newStock = prev + body.quantity;
+
+    // createInventoryCount 內含 transaction：寫軌跡＋更新庫存一體完成
+    storage.createInventoryCount({
+      clinicId:  cid,
+      countedBy: body.performedBy,
+      notes:     body.notes ? `進貨：${body.notes}` : "進貨",
+      items:     [{ consumableId: String(req.params.id), countedStock: newStock }],
+    } as any);
+
+    res.json({ success: true, previousStock: prev, newStock });
   });
 
   // ══════════════════════════════════════════════════════════════════════════

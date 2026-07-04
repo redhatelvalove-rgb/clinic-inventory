@@ -134,6 +134,12 @@ const inventoryCountItemSchema = z.object({
   countedStock: nonNegNum,
 });
 
+export const restockConsumableSchema = z.object({
+  quantity:    z.number({ coerce: true }).positive("數量必須大於 0"),
+  performedBy: nonEmpty, // 經手人（共用 iPad，留軌跡）
+  notes:       z.string().trim().max(200).optional().nullable(),
+});
+
 export const createInventoryCountSchema = z.object({
   countedBy: nonEmpty,
   notes:     z.string().trim().optional().nullable(),
