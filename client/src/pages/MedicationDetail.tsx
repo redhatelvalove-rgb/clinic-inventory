@@ -76,14 +76,14 @@ export default function MedicationDetail() {
             </div>
           </div>
           <div className="text-right">
-            <div className={`text-2xl font-bold ${isLow ? "text-red-500" : "text-foreground"}`}>{med.current_stock}</div>
+            <div className={`text-2xl font-bold ${isBelow ? "text-red-500" : isAtSafety ? "text-amber-500" : "text-foreground"}`}>{med.current_stock}</div>
             <div className="text-xs text-muted-foreground">總庫存 {med.unit}　安全 {med.safety_stock}</div>
           </div>
         </div>
       </Card>
 
       {/* 警示 */}
-      {(isLow || expiredCount > 0 || nearCount > 0) && (
+      {(isBelow || isAtSafety || expiredCount > 0 || nearCount > 0) && (
         <div className="space-y-2">
           {isBelow && <div className="flex items-center gap-2 text-sm rounded-lg px-3 py-2 bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300"><AlertTriangle size={14} />低於安全庫存，需補貨（{med.current_stock} ＜ {med.safety_stock}）</div>}
           {isAtSafety && <div className="flex items-center gap-2 text-sm rounded-lg px-3 py-2 bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300"><AlertTriangle size={14} />已達安全量，建議補貨（{med.current_stock} ＝ {med.safety_stock}）</div>}
