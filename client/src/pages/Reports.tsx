@@ -23,10 +23,10 @@ function recentMonths(): string[] {
 function ReportHeader({ title, month }: { title: string; month: string }) {
   return (
     <div className="text-center mb-4">
-      <div className="text-xs tracking-widest text-[#8a6d4f] mb-1">大興・骨立・華榮 聯合醫療</div>
+      <div className="text-xs tracking-widest text-[#8a6d4f] mb-1">骨立診所</div>
       <h2 className="text-lg font-bold">{title}</h2>
       <div className="text-sm text-muted-foreground mt-0.5">
-        骨立診所・{month.replace("-", " 年 ")} 月
+        {month.replace("-", " 年 ")} 月
       </div>
     </div>
   );
