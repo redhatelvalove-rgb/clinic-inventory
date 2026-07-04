@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import BarcodeScanner from "@/components/BarcodeScanner";
+import { NURSING_STAFF } from "@/lib/staff";
+import { taipeiToday } from "@shared/date-utils";
 
 /* ── 主入庫頁面 ── */
 export default function StockIn() {
@@ -19,6 +21,7 @@ export default function StockIn() {
   const [expiryDate, setExpiryDate] = useState("");
   const [unitCost, setUnitCost] = useState("");
   const [poNumber, setPoNumber] = useState("");
+  const [performer, setPerformer] = useState("");
   const [showScanner, setShowScanner] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [lastScanned, setLastScanned] = useState("");
@@ -32,11 +35,12 @@ export default function StockIn() {
       queryClient.invalidateQueries({ queryKey: ["/api/medications"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/batches/expiring"] });
       setSubmitted(true);
       toast({ title: "入庫成功", description: `已新增 ${quantity} ${selectedMed?.unit} 至庫存` });
     },
-    onError: () => {
-      toast({ title: "入庫失敗", variant: "destructive" });
+    onError: (err: any) => {
+      toast({ title: "入庫失敗", description: err?.message || "請稍後再試", variant: "destructive" });
     },
   });
 
@@ -54,15 +58,24 @@ export default function StockIn() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!medId || !batchNumber || !quantity || !expiryDate) return;
-    mutation.mutate({ medId, batchNumber, quantity: parseInt(quantity), expiryDate, unitCost: unitCost ? parseFloat(unitCost) : undefined, poNumber: poNumber || undefined });
+    if (!medId || !batchNumber || !quantity || !expiryDate || !performer) return;
+    const qty = Number(quantity);
+    if (!Number.isInteger(qty) || qty <= 0) {
+      toast({ title: "數量格式錯誤", description: "數量必須是大於 0 的整數", variant: "destructive" });
+      return;
+    }
+    if (expiryDate < taipeiToday()) {
+      toast({ title: "效期不可早於今天", description: "已過期的藥品請勿入庫；如需登記報廢請走報廢流程", variant: "destructive" });
+      return;
+    }
+    mutation.mutate({ medId, batchNumber, quantity: qty, expiryDate, performedBy: performer, unitCost: unitCost ? parseFloat(unitCost) : undefined, poNumber: poNumber || undefined });
   };
 
   const handleReset = () => {
-    setMedId(""); setBatchNumber(""); setQuantity(""); setExpiryDate(""); setUnitCost(""); setPoNumber(""); setSubmitted(false); setLastScanned("");
+    setMedId(""); setBatchNumber(""); setQuantity(""); setExpiryDate(""); setUnitCost(""); setPoNumber(""); setPerformer(""); setSubmitted(false); setLastScanned("");
   };
 
-  const daysLeft = expiryDate ? Math.ceil((new Date(expiryDate).getTime() - Date.now()) / 86400000) : null;
+  const daysLeft = expiryDate ? Math.ceil((new Date(expiryDate + "T00:00:00+08:00").getTime() - new Date(taipeiToday() + "T00:00:00+08:00").getTime()) / 86400000) : null;
 
   return (
     <div className="space-y-4 max-w-lg mx-auto">
@@ -164,7 +177,7 @@ export default function StockIn() {
                 <Label className="text-xs font-medium" htmlFor="expiry-input">
                   效期 * <span className="text-primary font-normal">（最重要，務必確認）</span>
                 </Label>
-                <Input id="expiry-input" className="h-10 text-sm" type="date"
+                <Input id="expiry-input" className="h-10 text-sm" type="date" min={taipeiToday()}
                   value={expiryDate} onChange={e => setExpiryDate(e.target.value)} data-testid="input-expiry" />
                 {daysLeft !== null && (
                   <div className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md
@@ -192,11 +205,22 @@ export default function StockIn() {
                 </div>
               </div>
 
+              {/* 操作人員（共用 iPad，每筆必選，軌跡才準） */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium" htmlFor="performer-select">操作人員 <span className="text-red-500">*</span></Label>
+                <select id="performer-select" value={performer} onChange={e => setPerformer(e.target.value)}
+                  className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  data-testid="select-performer">
+                  <option value="">— 請選擇護理師 —</option>
+                  {NURSING_STAFF.map(name => <option key={name} value={name}>{name}</option>)}
+                </select>
+              </div>
+
               {/* Submit — large mobile-friendly button */}
               <Button
                 type="submit"
                 className="w-full h-12 text-base font-semibold mt-2"
-                disabled={!medId || !batchNumber || !quantity || !expiryDate || mutation.isPending}
+                disabled={!medId || !batchNumber || !quantity || !expiryDate || !performer || mutation.isPending}
                 data-testid="button-submit">
                 {mutation.isPending ? "處理中..." : "確認入庫"}
               </Button>

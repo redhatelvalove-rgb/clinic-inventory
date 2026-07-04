@@ -8,7 +8,9 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, PackageMinus, CheckCircle2, AlertTriangle } from "lucide-react";
 import { NURSING_STAFF } from "@/lib/staff";
 
-const today = () => new Date().toISOString().split("T")[0];
+import { taipeiToday, formatTaipeiDateTime } from "@shared/date-utils";
+
+const today = () => taipeiToday();
 
 export default function StockOut() {
   const { toast } = useToast();
@@ -65,6 +67,7 @@ export default function StockOut() {
       queryClient.invalidateQueries({ queryKey: ["/api/medications"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/batches/expiring"] });
     },
     onError: (err: any) => toast({ title: "出庫失敗", description: err.message, variant: "destructive" }),
   });

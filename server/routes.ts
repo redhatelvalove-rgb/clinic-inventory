@@ -15,6 +15,7 @@ import type { Server } from "http";
 import bcrypt from "bcryptjs";
 import { storage } from "./storage";
 import { selectFefoBatches, computeDisposal, computeAdjustmentDelta } from "./inventory-logic";
+import { taipeiToday } from "@shared/date-utils";
 import {
   demoAuth,
   requireAuth,
@@ -230,7 +231,7 @@ export async function registerRoutes(httpServer: Server, app: Express) {
         quantity:    body.quantity,
         remainingQty: body.quantity,
         expiryDate:  body.expiryDate,
-        receivedDate: new Date().toISOString().split("T")[0],
+        receivedDate: taipeiToday(),
         unitCost:    body.unitCost ?? null,
         poNumber:    body.poNumber ?? null,
       });
@@ -277,7 +278,7 @@ export async function registerRoutes(httpServer: Server, app: Express) {
     }
 
     // ── FEFO 邏輯（純函式，已排除過期批次）──────────────────────────────────
-    const today = new Date().toISOString().split("T")[0];
+    const today = taipeiToday(); // 台北日，避免 UTC 造成凌晨 0–8 點過期批次仍可出庫
     // getBatches 回傳 snake_case，正規化成 NormBatch 再交給純函式
     const rawBatches = storage.getBatches(cid, body.medId) as any[];
     const normBatches = rawBatches.map(b => ({ id: b.id, remainingQty: b.remaining_qty, expiryDate: b.expiry_date }));
@@ -563,7 +564,7 @@ export async function registerRoutes(httpServer: Server, app: Express) {
     const month    = typeof req.query.month    === "string" ? req.query.month    : undefined;
     const category = typeof req.query.category === "string" ? req.query.category : undefined;
     const limitRaw = parseInt(req.query.limit as string);
-    const limit    = !isNaN(limitRaw) ? Math.min(limitRaw, 500) : undefined;
+    const limit    = !isNaN(limitRaw) ? Math.min(Math.max(limitRaw, 1), 500) : undefined; // 夾在 1–500，負數會變 SQLite 無上限
     res.json(storage.getExpenses(cid, { month, category, limit }));
   });
 

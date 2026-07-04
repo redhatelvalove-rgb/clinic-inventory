@@ -24,7 +24,7 @@ interface Expense {
   amount: number;
   description: string | null;
   vendor_name: string | null;
-  receipt_photo: string | null;
+  has_photo: number; // 列表 API 不回傳照片本體，展開時另行載入
   recorded_by: string;
   created_at: string;
 }
@@ -74,7 +74,7 @@ export default function ExpenseList() {
     queryFn: async () => {
       const params = new URLSearchParams({ month: selectedMonth });
       if (selectedCategory !== "全部") params.set("category", selectedCategory);
-      const res = await fetch(`/api/expenses?${params}`);
+      const res = await apiRequest("GET", `/api/expenses?${params}`);
       return res.json();
     },
   });
@@ -82,7 +82,7 @@ export default function ExpenseList() {
   const { data: summary = [] } = useQuery<MonthlySummary[]>({
     queryKey: ["/api/expenses/summary", selectedMonth],
     queryFn: async () => {
-      const res = await fetch(`/api/expenses/summary?month=${selectedMonth}`);
+      const res = await apiRequest("GET", `/api/expenses/summary?month=${selectedMonth}`);
       return res.json();
     },
   });
@@ -91,10 +91,25 @@ export default function ExpenseList() {
     mutationFn: async (id: string) => apiRequest("DELETE", `/api/expenses/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/expenses"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/expenses/summary"] });
       toast({ title: "已刪除費用紀錄" });
     },
-    onError: () => toast({ title: "刪除失敗", variant: "destructive" }),
+    onError: (e: any) => toast({ title: "刪除失敗", description: e?.message, variant: "destructive" }),
   });
+
+  const [photoLoadingId, setPhotoLoadingId] = useState<string | null>(null);
+  const openPhoto = async (id: string) => {
+    setPhotoLoadingId(id);
+    try {
+      const res = await apiRequest("GET", `/api/expenses/${id}/photo`);
+      const data = await res.json();
+      setLightboxSrc(data.receiptPhoto);
+    } catch (e: any) {
+      toast({ title: "載入照片失敗", description: e?.message, variant: "destructive" });
+    } finally {
+      setPhotoLoadingId(null);
+    }
+  };
 
   const filtered = useMemo(() => {
     if (!search) return expenses;
@@ -233,7 +248,7 @@ export default function ExpenseList() {
                         )}
                       </div>
                       <div className="flex-shrink-0 flex items-center gap-2">
-                        {exp.receipt_photo && (
+                        {!!exp.has_photo && (
                           <Image className="w-3.5 h-3.5 text-muted-foreground" />
                         )}
                         <span className="font-semibold tabular-nums text-sm">${exp.amount.toLocaleString()}</span>
@@ -261,21 +276,17 @@ export default function ExpenseList() {
                         <span>{exp.description}</span>
                       </div>
                     )}
-                    {/* 憑證照片 */}
-                    {exp.receipt_photo && (
+                    {/* 憑證照片（展開時才載入，列表不傳大檔） */}
+                    {!!exp.has_photo && (
                       <div className="mt-3">
                         <button
-                          onClick={() => setLightboxSrc(exp.receipt_photo!)}
-                          className="relative group"
+                          onClick={() => openPhoto(exp.id)}
+                          disabled={photoLoadingId === exp.id}
+                          className="flex items-center gap-1.5 text-sm px-3 h-9 rounded-md border border-border hover:bg-muted/40 transition-colors"
+                          data-testid={`btn-photo-${exp.id}`}
                         >
-                          <img
-                            src={exp.receipt_photo}
-                            alt="憑證"
-                            className="h-24 w-auto rounded-lg border border-border object-cover group-hover:opacity-80 transition-opacity"
-                          />
-                          <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                            <Image className="w-6 h-6 text-white drop-shadow" />
-                          </div>
+                          <Image className="w-4 h-4" />
+                          {photoLoadingId === exp.id ? "載入中..." : "查看憑證照片"}
                         </button>
                       </div>
                     )}

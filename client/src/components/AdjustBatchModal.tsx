@@ -38,6 +38,7 @@ export default function AdjustBatchModal({ medId, batch, unit, onClose }: Props)
       queryClient.invalidateQueries({ queryKey: ["/api/medications", medId] });
       queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/batches/expiring"] });
       toast({ title: "調整已記錄", description: `批號 ${batch.batch_number} 已更新。` });
       onClose();
     },

@@ -10,6 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { EXPENSE_CATEGORIES } from "@/lib/expenseCategories";
 import { NURSING_STAFF } from "@/lib/staff";
+import { taipeiToday } from "@shared/date-utils";
 
 const STAFF = [...NURSING_STAFF, "管理者"];
 
@@ -22,11 +23,34 @@ function toBase64(file: File): Promise<string> {
   });
 }
 
+/**
+ * 用 canvas 把照片壓成 JPEG base64：長邊最多 1600px，目標 300KB 以下。
+ * iPad 實拍照片動輒 3–5MB，不壓縮上傳必定失敗。
+ */
+async function compressImage(file: File): Promise<string> {
+  const dataUrl = await toBase64(file);
+  const img = new Image();
+  await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = dataUrl; });
+  const maxSide = 1600;
+  const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(img.width * scale);
+  canvas.height = Math.round(img.height * scale);
+  canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
+  let quality = 0.75;
+  let out = canvas.toDataURL("image/jpeg", quality);
+  while (out.length > 400_000 && quality > 0.35) { // base64 長度約為位元組數的 4/3
+    quality -= 0.15;
+    out = canvas.toDataURL("image/jpeg", quality);
+  }
+  return out;
+}
+
 export default function AddExpense() {
   const { toast } = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = taipeiToday();
 
   const [expenseDate, setExpenseDate] = useState(today);
   const [category, setCategory] = useState("");
@@ -45,10 +69,13 @@ export default function AddExpense() {
   const handlePhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    // 壓縮：若超過 1MB 就縮小
-    const b64 = await toBase64(file);
-    setPhotoBase64(b64);
-    setPhotoPreview(b64);
+    try {
+      const b64 = await compressImage(file);
+      setPhotoBase64(b64);
+      setPhotoPreview(b64);
+    } catch {
+      toast({ title: "照片處理失敗", description: "請換一張照片或改用截圖", variant: "destructive" });
+    }
   };
 
   const removePhoto = () => {
@@ -72,6 +99,7 @@ export default function AddExpense() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/expenses"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/expenses/summary"] });
       setLastRecord({ category, amount });
       toast({ title: "費用已記錄", description: `${category} $${Number(amount).toLocaleString()} 元` });
       setDone(true);
@@ -92,6 +120,8 @@ export default function AddExpense() {
   const resetForm = () => {
     setCategory(""); setSubcategory(""); setAmount(""); setVendorName("");
     setDescription(""); setPhotoBase64(null); setPhotoPreview(null);
+    setRecordedBy(""); // 共用 iPad：換人記錄時不可沿用上一位
+    setExpenseDate(taipeiToday());
     setDone(false); setLastRecord(null);
     if (fileRef.current) fileRef.current.value = "";
   };

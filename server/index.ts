@@ -16,6 +16,8 @@ declare module "http" {
 
 app.use(
   express.json({
+    // 費用憑證照片走 base64 JSON（手機照片壓縮後約數百 KB），預設 100kb 會 413
+    limit: "5mb",
     verify: (req, _res, buf) => {
       req.rawBody = buf;
     },
@@ -50,8 +52,10 @@ app.use((req, res, next) => {
     const duration = Date.now() - start;
     if (path.startsWith("/api")) {
       let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
+      // /api/auth 回應含 token、/api/expenses 含照片 base64 — 不落 log；其餘截斷避免撐爆磁碟
+      if (capturedJsonResponse && !path.startsWith("/api/auth") && !path.startsWith("/api/expenses")) {
+        const body = JSON.stringify(capturedJsonResponse);
+        logLine += ` :: ${body.length > 200 ? body.slice(0, 200) + "…(截斷)" : body}`;
       }
 
       log(logLine);
@@ -66,7 +70,6 @@ app.use((req, res, next) => {
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
 
     console.error("Internal Server Error:", err);
 
@@ -74,7 +77,9 @@ app.use((req, res, next) => {
       return next(err);
     }
 
-    return res.status(status).json({ message });
+    // 500 系列不回傳 err.message（可能含 SQL 錯誤等內部細節），細節只進 server log
+    const message = status >= 500 ? "伺服器發生錯誤，請稍後再試" : (err.message || "請求錯誤");
+    return res.status(status).json({ error: message });
   });
 
   // importantly only setup vite in development and after

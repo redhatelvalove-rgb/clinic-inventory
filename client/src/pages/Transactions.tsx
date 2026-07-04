@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { taipeiToday, taipeiDateOf, formatTaipeiDateTime } from "@shared/date-utils";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowDown, ArrowUp, RotateCcw, Trash2, Download, Filter } from "lucide-react";
 import { Card } from "@/components/ui/card";
@@ -37,7 +38,7 @@ function exportToExcel(rows: any[], dateFrom: string, dateTo: string) {
       patientId,
       useDate,
       t.performed_by || "—",
-      t.txn_time?.slice(0, 16) || "—",
+      formatTaipeiDateTime(t.txn_time) || "—",
     ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(",");
   });
 
@@ -53,7 +54,7 @@ function exportToExcel(rows: any[], dateFrom: string, dateTo: string) {
 }
 
 export default function Transactions() {
-  const today = new Date().toISOString().split("T")[0];
+  const today = taipeiToday();
   const firstOfMonth = today.slice(0, 7) + "-01";
 
   const [dateFrom, setDateFrom] = useState(firstOfMonth);
@@ -67,7 +68,7 @@ export default function Transactions() {
   // 前端篩選（日期 + 類型）
   const filtered = useMemo(() => {
     return txns.filter((t: any) => {
-      const txnDate = t.txn_time?.slice(0, 10) || "";
+      const txnDate = t.txn_time ? taipeiDateOf(t.txn_time) : ""; // 以台北日篩選，避免早上8點前歸前一天
       const inRange = (!dateFrom || txnDate >= dateFrom) && (!dateTo || txnDate <= dateTo);
       const inType  = typeFilter === "ALL" || t.txn_type === typeFilter;
       return inRange && inType;
@@ -190,7 +191,7 @@ export default function Transactions() {
                         <td className="px-4 py-2.5 text-sm text-foreground font-medium">{patientId}</td>
                         <td className="px-4 py-2.5 text-sm text-muted-foreground">{useDate}</td>
                         <td className="px-4 py-2.5 text-sm text-muted-foreground">{t.performed_by || "—"}</td>
-                        <td className="px-4 py-2.5 text-xs text-muted-foreground font-mono whitespace-nowrap hidden md:table-cell">{t.txn_time?.slice(0, 16)}</td>
+                        <td className="px-4 py-2.5 text-xs text-muted-foreground font-mono whitespace-nowrap hidden md:table-cell">{formatTaipeiDateTime(t.txn_time)}</td>
                       </tr>
                     );
                   })}

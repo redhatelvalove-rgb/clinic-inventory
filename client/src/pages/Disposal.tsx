@@ -8,7 +8,9 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, Trash2, CheckCircle2, AlertTriangle } from "lucide-react";
 import { NURSING_STAFF } from "@/lib/staff";
 
-const today = () => new Date().toISOString().split("T")[0];
+import { taipeiToday, formatTaipeiDateTime } from "@shared/date-utils";
+
+const today = () => taipeiToday();
 
 export default function Disposal() {
   const { toast } = useToast();
@@ -41,6 +43,7 @@ export default function Disposal() {
       queryClient.invalidateQueries({ queryKey: ["/api/medications", medId] });
       queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/batches/expiring"] });
     },
     onError: (err: any) => toast({ title: "報廢失敗", description: err.message, variant: "destructive" }),
   });

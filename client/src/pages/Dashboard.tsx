@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { formatTaipeiDateTime } from "@shared/date-utils";
 import { AlertTriangle, PackageCheck, TrendingDown, ArrowDown, ArrowUp, Clock, RefreshCw } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -178,7 +179,7 @@ export default function Dashboard() {
                   <div className={`mono font-medium text-xs ${t.txn_type === "IN" ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
                     {t.txn_type === "IN" ? "+" : ""}{t.quantity}
                   </div>
-                  <div className="text-xs text-muted-foreground whitespace-nowrap">{t.txn_time?.slice(0,16)}</div>
+                  <div className="text-xs text-muted-foreground whitespace-nowrap">{formatTaipeiDateTime(t.txn_time)}</div>
                 </div>
               ))}
             </div>

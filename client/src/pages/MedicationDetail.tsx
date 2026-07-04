@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useRoute, Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
 import { ArrowLeft, Pencil, Trash2, SlidersHorizontal, AlertTriangle, Package, Clock } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -8,7 +9,9 @@ import { Button } from "@/components/ui/button";
 import EditMedicationModal from "@/components/EditMedicationModal";
 import AdjustBatchModal from "@/components/AdjustBatchModal";
 
-const today = () => new Date().toISOString().split("T")[0];
+import { taipeiToday, formatTaipeiDateTime } from "@shared/date-utils";
+
+const today = () => taipeiToday();
 const daysTo = (d: string) => Math.ceil((new Date(d).getTime() - Date.now()) / 86400000);
 
 const TXN_LABEL: Record<string, { label: string; cls: string }> = {
@@ -31,7 +34,12 @@ export default function MedicationDetail() {
   const [adjustBatch, setAdjustBatch] = useState<any | null>(null);
 
   const { data: med, isLoading } = useQuery<any>({ queryKey: ["/api/medications", id], enabled: !!id });
-  const { data: txns = [] } = useQuery<any[]>({ queryKey: [`/api/transactions?medId=${id}`], enabled: !!id });
+  const { data: txns = [] } = useQuery<any[]>({
+    // 陣列 key 讓各 mutation 的 ["/api/transactions"] 前綴 invalidate 能命中（字串 key 永遠不會被刷新）
+    queryKey: ["/api/transactions", id],
+    queryFn: () => apiRequest("GET", `/api/transactions?medId=${id}`).then(r => r.json()),
+    enabled: !!id,
+  });
 
   if (isLoading) return <div className="max-w-3xl mx-auto py-10 text-sm text-muted-foreground">載入中…</div>;
   if (!med) return <div className="max-w-3xl mx-auto py-10 text-sm text-muted-foreground">找不到藥品。<Link href="/medications" className="text-primary ml-2">回藥品清單</Link></div>;
@@ -131,7 +139,7 @@ export default function MedicationDetail() {
                   <span className={`text-xs px-1.5 py-0.5 rounded shrink-0 ${meta.cls}`}>{meta.label}</span>
                   <span className={`font-medium tabular-nums w-12 text-right ${t.quantity < 0 ? "text-red-600" : "text-emerald-600"}`}>{t.quantity > 0 ? "+" : ""}{t.quantity}</span>
                   <span className="flex-1 min-w-0 truncate text-muted-foreground">{t.reason || "—"}</span>
-                  <span className="text-xs text-muted-foreground shrink-0 hidden sm:block">{(t.txn_time || "").slice(0, 16).replace("T", " ")}</span>
+                  <span className="text-xs text-muted-foreground shrink-0 hidden sm:block">{formatTaipeiDateTime(t.txn_time)}</span>
                   <span className="text-xs text-muted-foreground shrink-0">{t.performed_by || ""}</span>
                 </div>
               );

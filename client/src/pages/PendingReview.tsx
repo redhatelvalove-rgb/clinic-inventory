@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { formatTaipeiDateTime } from "@shared/date-utils";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
@@ -110,7 +111,7 @@ export default function PendingReview() {
                 )}
                 {m.submitted_at && (
                   <div className="flex items-center gap-1">
-                    <Calendar size={10} />{m.submitted_at?.slice(0, 16)}
+                    <Calendar size={10} />{formatTaipeiDateTime(m.submitted_at)}
                   </div>
                 )}
               </div>

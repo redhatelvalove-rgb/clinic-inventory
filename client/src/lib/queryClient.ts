@@ -16,7 +16,15 @@ function authHeaders(extra?: Record<string, string>): Record<string, string> {
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     const text = (await res.text()) || res.statusText;
-    throw new Error(`${res.status}: ${text}`);
+    // 後端錯誤格式是 {"error":"..."}；解析出人話給使用者看，解析失敗才退回原文
+    let message = text;
+    try {
+      const parsed = JSON.parse(text);
+      message = parsed.error || parsed.message || text;
+    } catch {
+      // 非 JSON 回應，維持原文
+    }
+    throw new Error(message);
   }
 }
 

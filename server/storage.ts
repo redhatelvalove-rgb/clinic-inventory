@@ -12,6 +12,7 @@ import type {
   Expense, InsertExpense
 } from "@shared/schema";
 import { randomUUID } from "crypto";
+import { taipeiToday, taipeiDatePlusDays, taipeiDayRangeUtc } from "@shared/date-utils";
 import bcrypt from "bcryptjs";
 
 const sqlite = new Database("data.db");
@@ -194,7 +195,7 @@ if (seedCount === 0) {
     { id: "MED-009", name: "Botox 肉毒桿菌素",    generic_name: "Botulinum Toxin Type A",      category: "神經阻斷劑",  unit: "瓶", current_stock: 2,  safety_stock: 1,  reorder_point: 2,  reorder_qty: 2,  storage_condition: "冷藏 2–8°C，禁凍",      vendor_id: "V005" },
   ];
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = taipeiToday();
   const expiryMap: Record<string, string> = {
     "MED-001": "2027-03-15", "MED-002": "2027-06-20", "MED-003": "2026-09-10",
     "MED-004": "2027-02-28", "MED-005": "2027-08-31", "MED-006": "2026-08-15",
@@ -445,8 +446,8 @@ export const storage: IStorage = {
     return sqlite.prepare("SELECT * FROM med_batches WHERE clinic_id = ?").all(clinicId) as Batch[];
   },
   getExpiringBatches(clinicId, days) {
-    const today = new Date().toISOString().split("T")[0];
-    const future = new Date(Date.now() + days * 86400000).toISOString().split("T")[0];
+    const today = taipeiToday();
+    const future = taipeiDatePlusDays(days);
     return sqlite.prepare(`
       SELECT b.*, m.name as medName, m.unit
       FROM med_batches b
@@ -521,20 +522,21 @@ export const storage: IStorage = {
   },
 
   getDashboardStats(clinicId) {
-    const today = new Date().toISOString().split("T")[0];
-    const in30 = new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0];
+    const today = taipeiToday();
+    const in30 = taipeiDatePlusDays(30);
+    const { startUtc, endUtc } = taipeiDayRangeUtc(); // 台北「今天」對應的 UTC 範圍
     const totalMeds     = (sqlite.prepare("SELECT COUNT(*) as c FROM medications WHERE clinic_id=? AND is_active=1").get(clinicId) as any).c;
     const expiringCount = (sqlite.prepare("SELECT COUNT(*) as c FROM med_batches WHERE clinic_id=? AND expiry_date BETWEEN ? AND ? AND remaining_qty > 0").get(clinicId, today, in30) as any).c;
     const lowStockCount = (sqlite.prepare("SELECT COUNT(*) as c FROM medications WHERE clinic_id=? AND current_stock <= safety_stock AND is_active=1").get(clinicId) as any).c;
-    const todayIn  = (sqlite.prepare("SELECT COALESCE(SUM(quantity),0) as c FROM transactions WHERE clinic_id=? AND txn_type='IN' AND DATE(txn_time)=?").get(clinicId, today) as any).c;
-    const todayOut = (sqlite.prepare("SELECT COALESCE(SUM(ABS(quantity)),0) as c FROM transactions WHERE clinic_id=? AND txn_type='OUT' AND DATE(txn_time)=?").get(clinicId, today) as any).c;
+    const todayIn  = (sqlite.prepare("SELECT COALESCE(SUM(quantity),0) as c FROM transactions WHERE clinic_id=? AND txn_type='IN' AND txn_time >= ? AND txn_time < ?").get(clinicId, startUtc, endUtc) as any).c;
+    const todayOut = (sqlite.prepare("SELECT COALESCE(SUM(ABS(quantity)),0) as c FROM transactions WHERE clinic_id=? AND txn_type='OUT' AND txn_time >= ? AND txn_time < ?").get(clinicId, startUtc, endUtc) as any).c;
     const lowStockConsumables = (sqlite.prepare("SELECT COUNT(*) as c FROM consumables WHERE clinic_id=? AND current_stock <= safety_stock AND is_active=1 AND is_durable=0").get(clinicId) as any).c;
     return { totalMeds, expiringCount, lowStockCount, todayIn, todayOut, lowStockConsumables };
   },
 
   getAllClinicsStats() {
-    const today = new Date().toISOString().split("T")[0];
-    const in30  = new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0];
+    const today = taipeiToday();
+    const in30  = taipeiDatePlusDays(30);
     const clinicList = sqlite.prepare("SELECT * FROM clinics WHERE is_active=1").all() as Clinic[];
     return clinicList.map(c => ({
       clinicId: c.id,
@@ -637,7 +639,8 @@ export const storage: IStorage = {
 
   // ── 費用記錄實作 ───────────────────────────────────────────────────────
   getExpenses(clinicId, opts = {}) {
-    let q = "SELECT * FROM expenses WHERE clinic_id=?";
+    // 列表不回傳 receipt_photo（大 base64），改回 has_photo；照片走 /api/expenses/:id/photo 單獨載入
+    let q = "SELECT id, clinic_id, expense_date, category, subcategory, amount, description, vendor_name, recorded_by, created_at, CASE WHEN receipt_photo IS NOT NULL THEN 1 ELSE 0 END AS has_photo FROM expenses WHERE clinic_id=?";
     const params: any[] = [clinicId];
     if (opts.month) { q += " AND substr(expense_date,1,7)=?"; params.push(opts.month); }
     if (opts.category) { q += " AND category=?"; params.push(opts.category); }
