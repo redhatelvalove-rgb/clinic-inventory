@@ -8,13 +8,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { CATEGORY_ORDER } from "@/lib/consumableCategories";
+import { MODULE_INFO, type ConsumableModule } from "@/lib/consumableCategories";
 
 interface Vendor { id: string; name: string; }
 
 const UNITS = ["個", "片", "包", "捲", "條", "瓶", "盒", "袋", "組", "副", "雙", "支", "張", "cc", "ml"];
 
-export default function AddConsumable() {
+export default function AddConsumable({ module = "supplies" }: { module?: ConsumableModule }) {
+  const info = MODULE_INFO[module];
   const { toast } = useToast();
   const [name, setName] = useState("");
   const [category, setCategory] = useState("");
@@ -66,7 +67,7 @@ export default function AddConsumable() {
       <div className="p-6 flex flex-col items-center justify-center min-h-[60vh] text-center">
         <PackagePlus className="w-14 h-14 text-green-500 mb-4" />
         <h2 className="text-xl font-semibold mb-2">品項新增完成！</h2>
-        <p className="text-muted-foreground mb-6">「{name}」已成功加入衛材清單。</p>
+        <p className="text-muted-foreground mb-6">「{name}」已成功加入{info.title}。</p>
         <div className="flex gap-3">
           <Button variant="outline" onClick={() => {
             setName(""); setCategory(""); setCustomCategory(""); setUnit(""); setCustomUnit("");
@@ -86,7 +87,7 @@ export default function AddConsumable() {
     <div className="p-4 md:p-6 space-y-4 max-w-lg mx-auto">
       <div className="flex items-center gap-2">
         <PackagePlus className="w-5 h-5 text-primary" />
-        <h1 className="text-xl font-semibold">新增衛材品項</h1>
+        <h1 className="text-xl font-semibold">{info.addTitle}</h1>
       </div>
 
       {/* 基本資料 */}
@@ -115,10 +116,11 @@ export default function AddConsumable() {
                 <SelectValue placeholder="選擇分類" />
               </SelectTrigger>
               <SelectContent>
-                {CATEGORY_ORDER.map(cat => (
+                {info.categories.map(cat => (
                   <SelectItem key={cat} value={cat}>{cat}</SelectItem>
                 ))}
-                <SelectItem value="__custom__">＋ 自訂分類...</SelectItem>
+                {/* 自訂分類只開放衛材模組：清潔/文書若自訂新分類，品項會被歸回衛材視圖 */}
+                {module === "supplies" && <SelectItem value="__custom__">＋ 自訂分類...</SelectItem>}
               </SelectContent>
             </Select>
             {category === "__custom__" && (

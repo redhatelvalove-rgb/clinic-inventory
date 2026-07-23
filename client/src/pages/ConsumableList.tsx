@@ -1,13 +1,13 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Package, AlertTriangle, Search, Filter, ChevronDown, ChevronUp, Pencil, Plus, PackagePlus } from "lucide-react";
+import { Package, AlertTriangle, Search, Filter, ChevronDown, ChevronUp, Pencil, Plus, PackagePlus, Sparkles, FileText } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { sortCategories, CATEGORY_ORDER } from "@/lib/consumableCategories";
+import { sortCategories, MODULE_INFO, moduleOfCategory, type ConsumableModule } from "@/lib/consumableCategories";
 import EditConsumableModal from "@/components/EditConsumableModal";
 import RestockConsumableModal from "@/components/RestockConsumableModal";
 import { useHashLocation } from "wouter/use-hash-location";
@@ -34,8 +34,16 @@ const CATEGORY_COLORS: Record<string, string> = {
   "手套防護":          "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200",
   "輸液注射":          "bg-violet-100 text-violet-800 dark:bg-violet-900 dark:text-violet-200",
   "清潔衛生":          "bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200",
+  "清潔用品":          "bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200",
   "行政文書":          "bg-stone-100 text-stone-700 dark:bg-stone-800 dark:text-stone-300",
+  "文書文具":          "bg-stone-100 text-stone-700 dark:bg-stone-800 dark:text-stone-300",
   "器械器具":          "bg-rose-100 text-rose-800 dark:bg-rose-900 dark:text-rose-200",
+};
+
+const MODULE_ICONS: Record<ConsumableModule, any> = {
+  supplies: Package,
+  cleaning: Sparkles,
+  stationery: FileText,
 };
 
 function StockBadge({ current, safety, isDurable }: { current: number; safety: number; isDurable: boolean }) {
@@ -45,7 +53,7 @@ function StockBadge({ current, safety, isDurable }: { current: number; safety: n
   return <Badge className="bg-green-600 text-white text-xs">正常</Badge>;
 }
 
-export default function ConsumableList() {
+export default function ConsumableList({ module = "supplies" }: { module?: ConsumableModule }) {
   const [, navigate] = useHashLocation();
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("全部");
@@ -53,9 +61,16 @@ export default function ConsumableList() {
   const [editingItem, setEditingItem] = useState<Consumable | null>(null);
   const [restockItem, setRestockItem] = useState<Consumable | null>(null);
 
-  const { data: consumables = [], isLoading } = useQuery<Consumable[]>({
+  const { data: allConsumables = [], isLoading } = useQuery<Consumable[]>({
     queryKey: ["/api/consumables"],
   });
+  // 只顯示屬於本模組的品項（衛材／清潔用品／文書文具共用同一張表，用分類劃分）
+  const consumables = useMemo(
+    () => allConsumables.filter(c => moduleOfCategory(c.category) === module),
+    [allConsumables, module],
+  );
+  const info = MODULE_INFO[module];
+  const ModuleIcon = MODULE_ICONS[module];
 
   // 從資料中取分類，依正確順序排列
   const categories = useMemo(() => {
@@ -99,8 +114,8 @@ export default function ConsumableList() {
       {/* 頁頭 */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-3">
         <div className="flex items-center gap-2 flex-1">
-          <Package className="w-5 h-5 text-primary" />
-          <h1 className="text-xl font-semibold">衛材清單</h1>
+          <ModuleIcon className="w-5 h-5 text-primary" />
+          <h1 className="text-xl font-semibold">{info.title}</h1>
         </div>
         {lowStockCount > 0 && (
           <div className="flex items-center gap-1.5 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700 text-amber-700 dark:text-amber-400 rounded-md px-3 py-1.5 text-sm">
@@ -108,7 +123,7 @@ export default function ConsumableList() {
             <span>{lowStockCount} 項庫存偏低</span>
           </div>
         )}
-        <Button size="sm" onClick={() => navigate("/consumables/add")} data-testid="btn-add-consumable">
+        <Button size="sm" onClick={() => navigate(info.addPath)} data-testid="btn-add-consumable">
           <Plus className="w-4 h-4 mr-1" />新增品項
         </Button>
       </div>

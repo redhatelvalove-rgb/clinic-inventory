@@ -27,7 +27,7 @@ import {
   LayoutDashboard, Pill, PackagePlus, PackageMinus, Building2,
   ArrowLeftRight, Bell, Sun, Moon, Activity, PlusCircle, Clock,
   Package, ClipboardList, History, Wallet, FilePlus, Trash2,
-  Thermometer, FileBarChart, FolderLock
+  Thermometer, FileBarChart, FolderLock, Sparkles, FileText
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -53,6 +53,16 @@ const consumableItems = [
   { path: "/consumables/add",     icon: PlusCircle,    label: "新增衛材品項" },
   { path: "/inventory-count",     icon: ClipboardList, label: "衛材盤點" },
   { path: "/count-history",       icon: History,       label: "盤點紀錄" },
+];
+
+const cleaningItems = [
+  { path: "/cleaning",     icon: Sparkles,   label: "清潔用品清單" },
+  { path: "/cleaning/add", icon: PlusCircle, label: "新增清潔用品" },
+];
+
+const stationeryItems = [
+  { path: "/stationery",     icon: FileText,   label: "文書文具清單" },
+  { path: "/stationery/add", icon: PlusCircle, label: "新增文書文具" },
 ];
 
 const expenseItems = [
@@ -161,6 +171,22 @@ function Sidebar() {
             <NavLink key={path} path={path} icon={icon} label={label}
               badge={path === "/consumables" && lowSupCount > 0 ? lowSupCount : undefined}
             />
+          ))}
+        </div>
+
+        {/* 清潔用品模組 */}
+        <SectionLabel label="🧹 清潔用品" />
+        <div className="space-y-0.5">
+          {cleaningItems.map(({ path, icon, label }) => (
+            <NavLink key={path} path={path} icon={icon} label={label} />
+          ))}
+        </div>
+
+        {/* 文書文具模組 */}
+        <SectionLabel label="📎 文書文具" />
+        <div className="space-y-0.5">
+          {stationeryItems.map(({ path, icon, label }) => (
+            <NavLink key={path} path={path} icon={icon} label={label} />
           ))}
         </div>
 
@@ -304,8 +330,12 @@ export default function App() {
             <Route path="/vendors"            component={Vendors} />
             <Route path="/add-medication"     component={AddMedication} />
             <Route path="/pending-review"     component={PendingReview} />
-            <Route path="/consumables"        component={ConsumableList} />
-            <Route path="/consumables/add"    component={AddConsumable} />
+            <Route path="/consumables">{() => <ConsumableList module="supplies" />}</Route>
+            <Route path="/consumables/add">{() => <AddConsumable module="supplies" />}</Route>
+            <Route path="/cleaning">{() => <ConsumableList module="cleaning" />}</Route>
+            <Route path="/cleaning/add">{() => <AddConsumable module="cleaning" />}</Route>
+            <Route path="/stationery">{() => <ConsumableList module="stationery" />}</Route>
+            <Route path="/stationery/add">{() => <AddConsumable module="stationery" />}</Route>
             <Route path="/inventory-count"    component={InventoryCount} />
             <Route path="/count-history"      component={CountHistory} />
             <Route path="/expenses"           component={ExpenseList} />
