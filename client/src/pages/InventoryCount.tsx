@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { sortCategories } from "@/lib/consumableCategories";
+import { sortCategories, MODULE_INFO, moduleOfCategory, type ConsumableModule } from "@/lib/consumableCategories";
 import { NURSING_STAFF } from "@/lib/staff";
 
 const NURSES = NURSING_STAFF;
@@ -175,7 +175,8 @@ function CountCard({
 }
 
 // ── 主頁面 ──────────────────────────────────────────────────────────────────
-export default function InventoryCount() {
+export default function InventoryCount({ module = "supplies" }: { module?: ConsumableModule }) {
+  const info = MODULE_INFO[module];
   const { toast } = useToast();
   const [nurse, setNurse] = useState("");
   const [notes, setNotes] = useState("");
@@ -184,9 +185,14 @@ export default function InventoryCount() {
   const [selectedCat, setSelectedCat] = useState("全部（非器械）");
   const [submitted, setSubmitted] = useState(false);
 
-  const { data: consumables = [], isLoading } = useQuery<Consumable[]>({
+  const { data: allConsumables = [], isLoading } = useQuery<Consumable[]>({
     queryKey: ["/api/consumables"],
   });
+  // 只盤本模組的品項（衛材／清潔用品／文書文具分開盤）
+  const consumables = useMemo(
+    () => allConsumables.filter(c => moduleOfCategory(c.category) === module),
+    [allConsumables, module],
+  );
 
   // 非器械品項
   const nonDurable = consumables.filter(c => !c.is_durable && c.is_active);
@@ -236,7 +242,9 @@ export default function InventoryCount() {
       .filter(([, v]) => v !== "" && !isNaN(Number(v)))
       .map(([consumableId, v]) => ({ consumableId, countedStock: Number(v) }));
     if (items.length === 0) { toast({ title: "請至少填寫一項盤點數量", variant: "destructive" }); return; }
-    mutation.mutate({ countedBy: nurse, notes, items });
+    // 清潔/文書盤點在備註自動加標記，盤點紀錄頁才分得出來
+    const taggedNotes = module === "supplies" ? notes : `【${info.title}】${notes}`.trim();
+    mutation.mutate({ countedBy: nurse, notes: taggedNotes, items });
   };
 
   // ── 完成畫面 ─────────────────────────────────────────────────────────────
@@ -265,7 +273,7 @@ export default function InventoryCount() {
       {/* 頁頭 */}
       <div className="flex items-center gap-2">
         <ClipboardList className="w-5 h-5 text-primary" />
-        <h1 className="text-xl font-semibold">衛材盤點</h1>
+        <h1 className="text-xl font-semibold">{info.countTitle}</h1>
       </div>
 
       {/* ── Step 1：護理師 + 備註 ───────────────────────────────────────── */}

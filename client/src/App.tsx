@@ -56,13 +56,15 @@ const consumableItems = [
 ];
 
 const cleaningItems = [
-  { path: "/cleaning",     icon: Sparkles,   label: "清潔用品清單" },
-  { path: "/cleaning/add", icon: PlusCircle, label: "新增清潔用品" },
+  { path: "/cleaning",       icon: Sparkles,      label: "清潔用品清單" },
+  { path: "/cleaning/add",   icon: PlusCircle,    label: "新增清潔用品" },
+  { path: "/cleaning/count", icon: ClipboardList, label: "清潔用品盤點" },
 ];
 
 const stationeryItems = [
-  { path: "/stationery",     icon: FileText,   label: "文書文具清單" },
-  { path: "/stationery/add", icon: PlusCircle, label: "新增文書文具" },
+  { path: "/stationery",       icon: FileText,      label: "文書文具清單" },
+  { path: "/stationery/add",   icon: PlusCircle,    label: "新增文書文具" },
+  { path: "/stationery/count", icon: ClipboardList, label: "文書文具盤點" },
 ];
 
 const expenseItems = [
@@ -334,9 +336,11 @@ export default function App() {
             <Route path="/consumables/add">{() => <AddConsumable module="supplies" />}</Route>
             <Route path="/cleaning">{() => <ConsumableList module="cleaning" />}</Route>
             <Route path="/cleaning/add">{() => <AddConsumable module="cleaning" />}</Route>
+            <Route path="/cleaning/count">{() => <InventoryCount module="cleaning" />}</Route>
             <Route path="/stationery">{() => <ConsumableList module="stationery" />}</Route>
             <Route path="/stationery/add">{() => <AddConsumable module="stationery" />}</Route>
-            <Route path="/inventory-count"    component={InventoryCount} />
+            <Route path="/stationery/count">{() => <InventoryCount module="stationery" />}</Route>
+            <Route path="/inventory-count">{() => <InventoryCount module="supplies" />}</Route>
             <Route path="/count-history"      component={CountHistory} />
             <Route path="/expenses"           component={ExpenseList} />
             <Route path="/expenses/add"       component={AddExpense} />

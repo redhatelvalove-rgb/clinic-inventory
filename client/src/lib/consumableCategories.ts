@@ -30,12 +30,13 @@ export type ConsumableModule = "supplies" | "cleaning" | "stationery";
 export const MODULE_INFO: Record<ConsumableModule, {
   title: string;
   addTitle: string;
+  countTitle: string;
   addPath: string;
   categories: string[];
 }> = {
-  supplies:   { title: "衛材清單", addTitle: "新增衛材品項", addPath: "/consumables/add", categories: SUPPLY_CATEGORIES },
-  cleaning:   { title: "清潔用品", addTitle: "新增清潔用品", addPath: "/cleaning/add",    categories: CLEANING_CATEGORIES },
-  stationery: { title: "文書文具", addTitle: "新增文書文具", addPath: "/stationery/add",  categories: STATIONERY_CATEGORIES },
+  supplies:   { title: "衛材清單", addTitle: "新增衛材品項", countTitle: "衛材盤點",     addPath: "/consumables/add", categories: SUPPLY_CATEGORIES },
+  cleaning:   { title: "清潔用品", addTitle: "新增清潔用品", countTitle: "清潔用品盤點", addPath: "/cleaning/add",    categories: CLEANING_CATEGORIES },
+  stationery: { title: "文書文具", addTitle: "新增文書文具", countTitle: "文書文具盤點", addPath: "/stationery/add",  categories: STATIONERY_CATEGORIES },
 };
 
 /** 判斷某分類屬於哪個模組 */
