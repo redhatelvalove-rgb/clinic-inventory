@@ -694,7 +694,7 @@ export const storage: IStorage = {
       INSERT INTO medications (id, clinic_id, name, generic_name, barcode, category, unit,
         current_stock, safety_stock, reorder_point, reorder_qty, storage_condition, vendor_id,
         notes, is_active, status, submitted_by, submitted_at)
-      VALUES (?,?,?,?,?,?,?,0,?,?,?,?,?,?,1,'pending',?,?)
+      VALUES (?,?,?,?,?,?,?,0,?,?,?,?,?,?,1,'active',?,?)
     `).run(
       id, data.clinicId, data.name, data.genericName || null, data.barcode || null,
       data.category, data.unit, data.safetyStock,

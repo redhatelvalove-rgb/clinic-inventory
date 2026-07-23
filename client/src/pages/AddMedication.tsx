@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, PlusCircle, Clock, Camera } from "lucide-react";
+import { Loader2, PlusCircle, CheckCircle2, Camera } from "lucide-react";
 import { NURSING_STAFF } from "@/lib/staff";
 import BarcodeScanner from "@/components/BarcodeScanner";
 import type { Vendor } from "@shared/schema";
@@ -62,7 +62,7 @@ export default function AddMedication() {
     onSuccess: () => {
       setSubmittedName(form.name);
       setDone(true);
-      queryClient.invalidateQueries({ queryKey: ["/api/medications/pending/count"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/medications"] });
     },
     onError: (err: any) => toast({ title: "提交失敗", description: err.message, variant: "destructive" }),
   });
@@ -87,13 +87,10 @@ export default function AddMedication() {
     return (
       <div className="max-w-md mx-auto pt-8 px-2">
         <div className="bg-card border border-border rounded-xl p-6 text-center shadow-sm">
-          <Clock size={48} className="text-amber-500 mx-auto mb-3" />
-          <h2 className="text-lg font-bold text-foreground mb-1">已送出，等待審核</h2>
-          <p className="text-sm text-muted-foreground mb-2">
-            「{submittedName}」已提交，管理者審核後才會出現在藥品清單。
-          </p>
-          <p className="text-xs text-muted-foreground mb-5">
-            請告知管理者查看「待審核」清單。
+          <CheckCircle2 size={48} className="text-emerald-500 mx-auto mb-3" />
+          <h2 className="text-lg font-bold text-foreground mb-1">新增完成</h2>
+          <p className="text-sm text-muted-foreground mb-5">
+            「{submittedName}」已加入藥品清單，可直接入庫。
           </p>
           <Button onClick={handleReset} className="w-full" variant="outline">
             繼續新增品項
@@ -117,7 +114,7 @@ export default function AddMedication() {
           <PlusCircle size={20} className="text-primary" />
           新增藥品／耗材
         </h1>
-        <p className="text-xs text-muted-foreground mt-0.5">填寫完成後送交管理者審核，審核通過才會上線</p>
+        <p className="text-xs text-muted-foreground mt-0.5">填寫完成後即加入藥品清單</p>
       </div>
 
       <form onSubmit={handleSubmit} className="bg-card border border-border rounded-xl p-5 shadow-sm space-y-4">
@@ -262,10 +259,9 @@ export default function AddMedication() {
         <div className="pt-1">
           <Button type="submit" className="w-full h-12 text-base" disabled={mutation.isPending} data-testid="button-submit-med">
             {mutation.isPending
-              ? <><Loader2 size={16} className="mr-2 animate-spin" />提交中...</>
-              : <><PlusCircle size={16} className="mr-2" />送交審核</>}
+              ? <><Loader2 size={16} className="mr-2 animate-spin" />儲存中...</>
+              : <><PlusCircle size={16} className="mr-2" />儲存品項</>}
           </Button>
-          <p className="text-xs text-center text-muted-foreground mt-2">送出後需管理者核准才會上線</p>
         </div>
       </form>
     </div>
