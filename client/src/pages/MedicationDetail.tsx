@@ -77,7 +77,18 @@ export default function MedicationDetail() {
           </div>
           <div className="text-right">
             <div className={`text-2xl font-bold ${isBelow ? "text-red-500" : isAtSafety ? "text-amber-500" : "text-foreground"}`}>{med.current_stock}</div>
-            <div className="text-xs text-muted-foreground">總庫存 {med.unit}　安全 {med.safety_stock}</div>
+            <div className="text-xs text-muted-foreground flex items-center justify-end gap-1">
+              總庫存 {med.unit}　安全 {med.safety_stock}
+              <button
+                type="button"
+                onClick={() => setEditing(true)}
+                title="調整安全量"
+                className="w-5 h-5 flex items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                data-testid="btn-adjust-safety"
+              >
+                <Pencil size={11} />
+              </button>
+            </div>
           </div>
         </div>
       </Card>

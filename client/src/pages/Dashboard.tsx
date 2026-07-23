@@ -1,9 +1,13 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "wouter";
 import { formatTaipeiDateTime } from "@shared/date-utils";
-import { AlertTriangle, PackageCheck, TrendingDown, ArrowDown, ArrowUp, Clock, RefreshCw } from "lucide-react";
+import { AlertTriangle, PackageCheck, TrendingDown, ArrowDown, ArrowUp, Clock, RefreshCw, FileBarChart, Pencil } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import EditMedicationModal from "@/components/EditMedicationModal";
 
 function daysUntil(dateStr: string) {
   const d = new Date(dateStr);
@@ -33,6 +37,7 @@ function StockLevel({ current, safety, reorder }: { current: number; safety: num
 export default function Dashboard() {
   const { data, isLoading } = useQuery({ queryKey: ["/api/dashboard"], refetchInterval: 30000 });
   const d = data as any;
+  const [editingMed, setEditingMed] = useState<any | null>(null);
 
   if (isLoading) return (
     <div className="space-y-6">
@@ -57,10 +62,18 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6 max-w-6xl">
-      {/* Page title */}
-      <div>
-        <h1 className="text-xl font-semibold text-foreground">儀表板</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">庫存狀態總覽</p>
+      {editingMed && <EditMedicationModal item={editingMed} onClose={() => setEditingMed(null)} />}
+      {/* Page title + 報表捷徑 */}
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold text-foreground">儀表板</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">庫存狀態總覽</p>
+        </div>
+        <Link href="/reports">
+          <Button data-testid="btn-reports-shortcut">
+            <FileBarChart size={16} className="mr-1.5" />報表中心
+          </Button>
+        </Link>
       </div>
 
       {/* Stat cards */}
@@ -152,10 +165,21 @@ export default function Dashboard() {
               <div className="divide-y divide-border">
                 {lowStock.map((m: any) => (
                   <div key={m.id} className="px-4 py-2.5" data-testid={`lowstock-row-${m.id}`}>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-sm font-medium text-foreground">{m.name}</span>
-                      <span className={`text-xs font-medium ${m.current_stock < m.safety_stock ? "text-red-600 dark:text-red-400" : "text-amber-600 dark:text-amber-400"}`}>
-                        {m.current_stock < m.safety_stock ? "需補貨" : "已達安全量"} {m.reorder_qty || m.reorder_point || m.safety_stock} {m.unit}
+                    <div className="flex items-center justify-between mb-1 gap-2">
+                      <Link href={`/medications/${m.id}`} className="text-sm font-medium text-foreground hover:text-primary hover:underline truncate">{m.name}</Link>
+                      <span className="flex items-center gap-1 flex-shrink-0">
+                        <span className={`text-xs font-medium ${m.current_stock < m.safety_stock ? "text-red-600 dark:text-red-400" : "text-amber-600 dark:text-amber-400"}`}>
+                          {m.current_stock < m.safety_stock ? "需補貨" : "已達安全量"}・建議補 {m.reorder_qty || m.reorder_point || m.safety_stock} {m.unit}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setEditingMed(m)}
+                          title="調整安全量／編輯"
+                          className="w-6 h-6 flex items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                          data-testid={`btn-adjust-safety-${m.id}`}
+                        >
+                          <Pencil size={12} />
+                        </button>
                       </span>
                     </div>
                     <StockLevel current={m.current_stock} safety={m.safety_stock} reorder={m.reorder_point} />

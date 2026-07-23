@@ -66,6 +66,7 @@ export default function EditMedicationModal({ item, onClose }: { item: Med; onCl
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/medications"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard"] });
       toast({ title: "修改已儲存", description: `「${name}」已更新。` });
       onClose();
     },
