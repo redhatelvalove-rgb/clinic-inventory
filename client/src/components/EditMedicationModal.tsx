@@ -10,7 +10,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import BarcodeScanner from "@/components/BarcodeScanner";
 import type { Vendor } from "@shared/schema";
 
-const CATEGORIES = ["關節注射", "骨質疏鬆", "骨質疏鬆針劑", "神經阻斷劑", "耗材", "其他"];
+import { MED_CATEGORIES as CATEGORIES } from "@/lib/medicationCategories";
 const UNITS = ["支", "盒", "包", "條", "瓶", "片", "個"];
 const STORAGE = ["室溫 15–30°C，避光", "冷藏 2–8°C，禁凍避光", "冷藏 2–8°C，禁凍", "室溫，避光"];
 

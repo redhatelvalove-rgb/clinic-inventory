@@ -44,6 +44,7 @@ import {
   rejectSchema,
   createConsumableSchema,
   updateConsumableSchema,
+  createVendorSchema,
   restockConsumableSchema,
   fridgeTempSchema,
   createDocumentSchema,
@@ -438,6 +439,22 @@ export async function registerRoutes(httpServer: Server, app: Express) {
 
   app.get("/api/vendors", auth, (req, res) => {
     res.json(storage.getVendors(clinicId(req)));
+  });
+
+  app.post("/api/vendors", auth, (req, res) => {
+    const body = parseBody(req, res, createVendorSchema);
+    if (!body) return;
+    const vendor = storage.createVendor({
+      clinicId:      clinicId(req),
+      companyName:   body.companyName,
+      contactPerson: body.contactPerson || null,
+      phone:         body.phone || null,
+      email:         body.email || null,
+      leadTimeDays:  body.leadTimeDays ?? 5,
+      notes:         body.notes || null,
+      isActive:      true,
+    });
+    res.json(vendor);
   });
 
   // ══════════════════════════════════════════════════════════════════════════

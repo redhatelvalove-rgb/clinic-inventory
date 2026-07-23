@@ -127,6 +127,17 @@ export const updateConsumableSchema = createConsumableSchema
     isActive: z.boolean().optional(),
   });
 
+// ── 廠商 (Vendors) ────────────────────────────────────────────────────────────
+
+export const createVendorSchema = z.object({
+  companyName:   nonEmpty,
+  contactPerson: z.string().trim().optional().nullable(),
+  phone:         z.string().trim().optional().nullable(),
+  email:         z.string().trim().optional().nullable(),
+  leadTimeDays:  nonNegInt.optional(),
+  notes:         z.string().trim().optional().nullable(),
+});
+
 // ── 盤點 (Inventory Count) ────────────────────────────────────────────────────
 
 const inventoryCountItemSchema = z.object({

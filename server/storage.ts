@@ -425,6 +425,7 @@ export interface IStorage {
   createTransaction(data: InsertTransaction): Transaction;
   // Vendors
   getVendors(clinicId: string): Vendor[];
+  createVendor(data: InsertVendor): Vendor;
   // Dashboard
   getDashboardStats(clinicId: string): { totalMeds: number; expiringCount: number; lowStockCount: number; todayIn: number; todayOut: number; lowStockConsumables: number };
   // 待審核藥品
@@ -672,6 +673,13 @@ export const storage: IStorage = {
 
   getVendors(clinicId) {
     return sqlite.prepare("SELECT * FROM vendors WHERE clinic_id = ? AND is_active = 1").all(clinicId) as Vendor[];
+  },
+
+  createVendor(data) {
+    const id = "V-" + randomUUID().slice(0, 8).toUpperCase();
+    db.insert(vendors).values({ ...data, id }).run();
+    // 回傳 raw SELECT（snake_case），與 getVendors 讀路徑一致
+    return sqlite.prepare("SELECT * FROM vendors WHERE id = ?").get(id) as Vendor;
   },
 
   // ── 待審核藥品 ──────────────────────────────────────────────────────────────

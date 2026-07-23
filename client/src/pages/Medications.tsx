@@ -1,7 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link } from "wouter";
-import { Search, Filter, Pill, Thermometer, AlertTriangle, Pencil, Clock } from "lucide-react";
+import { Search, Filter, Pill, Thermometer, AlertTriangle, Pencil, Clock, Plus } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -73,6 +74,11 @@ export default function Medications() {
           <h1 className="text-xl font-semibold text-foreground">藥品管理</h1>
           <p className="text-sm text-muted-foreground mt-0.5">共 {meds.length} 項藥品</p>
         </div>
+        <Link href="/add-medication">
+          <Button size="sm" data-testid="btn-add-medication">
+            <Plus className="w-4 h-4 mr-1" />新增品項
+          </Button>
+        </Link>
       </div>
 
       {/* Filters */}

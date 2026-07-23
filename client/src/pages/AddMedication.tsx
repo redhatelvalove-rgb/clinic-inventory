@@ -9,8 +9,8 @@ import { Loader2, PlusCircle, Clock, Camera } from "lucide-react";
 import { NURSING_STAFF } from "@/lib/staff";
 import BarcodeScanner from "@/components/BarcodeScanner";
 import type { Vendor } from "@shared/schema";
+import { MED_CATEGORIES as CATEGORIES } from "@/lib/medicationCategories";
 
-const CATEGORIES = ["關節注射", "骨質疏鬆", "骨質疏鬆針劑", "神經阻斷劑", "耗材", "其他"];
 const UNITS = ["支", "盒", "包", "條", "瓶", "片", "個"];
 const STORAGE = ["室溫 15–30°C，避光", "冷藏 2–8°C，禁凍避光", "冷藏 2–8°C，禁凍", "室溫，避光"];
 
@@ -26,14 +26,39 @@ export default function AddMedication() {
     storageCondition: "", vendorId: "", barcode: "",
     notes: "", submittedBy: "",
   });
+  const [customCategory, setCustomCategory] = useState("");
+  const [customUnit, setCustomUnit] = useState("");
+  const [customStorage, setCustomStorage] = useState("");
+  const [newVendorName, setNewVendorName] = useState("");
 
   const { data: vendors = [] } = useQuery<Vendor[]>({ queryKey: ["/api/vendors"] });
 
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
     setForm(f => ({ ...f, [k]: e.target.value }));
 
+  const effectiveCategory = form.category === "__custom__" ? customCategory.trim() : form.category;
+  const effectiveUnit = form.unit === "__custom__" ? customUnit.trim() : form.unit;
+  const effectiveStorage = form.storageCondition === "__custom__" ? customStorage.trim() : form.storageCondition;
+
+  const vendorMutation = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/vendors", { companyName: newVendorName.trim() }).then(r => r.json()),
+    onSuccess: (v: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/vendors"] });
+      setForm(f => ({ ...f, vendorId: v.id }));
+      setNewVendorName("");
+      toast({ title: "廠商已建立", description: `「${v.company_name || v.companyName}」已加入廠商目錄。` });
+    },
+    onError: (err: any) => toast({ title: "廠商建立失敗", description: err.message, variant: "destructive" }),
+  });
+
   const mutation = useMutation({
-    mutationFn: () => apiRequest("POST", "/api/medications/submit", form).then(r => r.json()),
+    mutationFn: () => apiRequest("POST", "/api/medications/submit", {
+      ...form,
+      category: effectiveCategory,
+      unit: effectiveUnit,
+      storageCondition: effectiveStorage,
+      vendorId: form.vendorId === "__new__" ? "" : form.vendorId,
+    }).then(r => r.json()),
     onSuccess: () => {
       setSubmittedName(form.name);
       setDone(true);
@@ -44,7 +69,7 @@ export default function AddMedication() {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.name || !form.category || !form.unit || !form.safetyStock)
+    if (!form.name || !effectiveCategory || !effectiveUnit || !form.safetyStock)
       return toast({ title: "請填寫必填欄位", variant: "destructive" });
     mutation.mutate();
   }
@@ -53,6 +78,7 @@ export default function AddMedication() {
     setForm({ name: "", genericName: "", category: "", unit: "",
       safetyStock: "", reorderPoint: "", reorderQty: "",
       storageCondition: "", vendorId: "", barcode: "", notes: "", submittedBy: "" });
+    setCustomCategory(""); setCustomUnit(""); setCustomStorage(""); setNewVendorName("");
     setDone(false);
   }
 
@@ -117,7 +143,13 @@ export default function AddMedication() {
               data-testid="select-category">
               <option value="">— 選擇 —</option>
               {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+              <option value="__custom__">＋ 自訂分類...</option>
             </select>
+            {form.category === "__custom__" && (
+              <Input className="mt-2" placeholder="輸入新分類名稱"
+                value={customCategory} onChange={e => setCustomCategory(e.target.value)}
+                data-testid="input-custom-category" />
+            )}
           </div>
           <div className="space-y-1.5">
             <Label className="text-sm font-medium">單位 <span className="text-red-500">*</span></Label>
@@ -126,7 +158,13 @@ export default function AddMedication() {
               data-testid="select-unit">
               <option value="">— 選擇 —</option>
               {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+              <option value="__custom__">＋ 自訂單位...</option>
             </select>
+            {form.unit === "__custom__" && (
+              <Input className="mt-2" placeholder="輸入新單位"
+                value={customUnit} onChange={e => setCustomUnit(e.target.value)}
+                data-testid="input-custom-unit" />
+            )}
           </div>
         </div>
 
@@ -151,7 +189,13 @@ export default function AddMedication() {
             data-testid="select-storage">
             <option value="">— 選擇 —</option>
             {STORAGE.map(s => <option key={s} value={s}>{s}</option>)}
+            <option value="__custom__">＋ 自訂儲存條件...</option>
           </select>
+          {form.storageCondition === "__custom__" && (
+            <Input className="mt-2" placeholder="輸入儲存條件，例：陰涼乾燥處"
+              value={customStorage} onChange={e => setCustomStorage(e.target.value)}
+              data-testid="input-custom-storage" />
+          )}
         </div>
 
         {/* 廠商 */}
@@ -162,7 +206,22 @@ export default function AddMedication() {
             data-testid="select-vendor">
             <option value="">— 選擇廠商 —</option>
             {vendors.map((v: any) => <option key={v.id} value={v.id}>{v.company_name || v.companyName}</option>)}
+            <option value="__new__">＋ 新增廠商...</option>
           </select>
+          {form.vendorId === "__new__" && (
+            <div className="flex gap-2 mt-2">
+              <Input className="flex-1" placeholder="輸入廠商名稱"
+                value={newVendorName} onChange={e => setNewVendorName(e.target.value)}
+                data-testid="input-new-vendor" />
+              <Button type="button" variant="outline" className="h-10 px-3 shrink-0"
+                disabled={!newVendorName.trim() || vendorMutation.isPending}
+                onClick={() => vendorMutation.mutate()}
+                data-testid="button-create-vendor">
+                {vendorMutation.isPending ? <Loader2 size={16} className="animate-spin" /> : "建立"}
+              </Button>
+            </div>
+          )}
+          <p className="text-xs text-muted-foreground">聯絡資訊可之後到「廠商」頁補填</p>
         </div>
 
         {/* 條碼 */}
